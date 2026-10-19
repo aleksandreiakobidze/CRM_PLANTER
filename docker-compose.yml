@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: planter
+      POSTGRES_PASSWORD: planter
+      POSTGRES_DB: planter
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U planter -d planter"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://planter:planter@postgres:5432/planter
+      SESSION_SECRET: replace-in-production
+      NODE_ENV: production
+      SEED_DEMO: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/app/data/uploads
+
+  worker:
+    build: .
+    command: npm run worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://planter:planter@postgres:5432/planter
+      SESSION_SECRET: replace-in-production
+      NODE_ENV: production
+      SEED_DEMO: "false"
+    volumes:
+      - uploads:/app/data/uploads
+
+volumes:
+  pgdata:
+  uploads:
