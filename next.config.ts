@@ -4,6 +4,7 @@ const hostinger = process.env.npm_lifecycle_event === "build:hostinger";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  output: hostinger ? "standalone" : undefined,
   typescript: {
     ignoreBuildErrors: hostinger,
   },
