@@ -1,5 +1,5 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { getDb } from "@/server/db";
+import { contains, getDb } from "@/server/db";
 
 export type CustomerListParams = {
   q?: string;
@@ -84,13 +84,13 @@ export function customerListWhere(organizationId: string, filters: CustomerListF
     ...(filters.q
       ? {
           OR: [
-            { name: { contains: filters.q, mode: "insensitive" } },
-            { phone: { contains: filters.q, mode: "insensitive" } },
-            { phoneNormalized: { contains: filters.q, mode: "insensitive" } },
-            { venueType: { contains: filters.q, mode: "insensitive" } },
-            { district: { contains: filters.q, mode: "insensitive" } },
-            { website: { contains: filters.q, mode: "insensitive" } },
-            { addresses: { some: { line1: { contains: filters.q, mode: "insensitive" } } } },
+            { name: contains(filters.q) },
+            { phone: contains(filters.q) },
+            { phoneNormalized: contains(filters.q) },
+            { venueType: contains(filters.q) },
+            { district: contains(filters.q) },
+            { website: contains(filters.q) },
+            { addresses: { some: { line1: contains(filters.q) } } },
           ],
         }
       : {}),

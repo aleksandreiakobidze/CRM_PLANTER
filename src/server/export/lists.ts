@@ -1,6 +1,6 @@
 import type { Actor } from "@/server/auth/permissions";
 import { can } from "@/server/auth/permissions";
-import { getDb } from "@/server/db";
+import { contains, getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListParams } from "@/server/features/crm/customer-list";
 import { listBalances } from "@/server/features/inventory/stock-service";
@@ -236,7 +236,7 @@ export async function productsWorkbook(actor: Actor, q: string): Promise<ExportF
   const variants = await getDb().productVariant.findMany({
     where: {
       organizationId: actor.organizationId,
-      OR: query ? [{ sku: { contains: query, mode: "insensitive" } }, { nameKa: { contains: query, mode: "insensitive" } }] : undefined,
+      OR: query ? [{ sku: contains(query) }, { nameKa: contains(query) }] : undefined,
     },
     include: { product: true },
     orderBy: { sku: "asc" },

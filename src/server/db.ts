@@ -24,3 +24,15 @@ export function getDb(): PrismaClient {
 
 export type DbClient = PrismaClient;
 export type Tx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+export function isMysql() {
+  return (process.env.DATABASE_URL ?? "").startsWith("mysql");
+}
+
+/** Case-insensitive contains. MySQL collation already ignores case, so `mode` is omitted there. */
+export function contains(value: string) {
+  return (isMysql() ? { contains: value } : { contains: value, mode: "insensitive" as const }) as {
+    contains: string;
+    mode?: "insensitive";
+  };
+}

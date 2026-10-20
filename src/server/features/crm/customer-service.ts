@@ -1,7 +1,7 @@
 import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
 import { audit } from "@/server/audit";
-import { getDb, type Tx } from "@/server/db";
+import { contains, getDb, type Tx } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { normalizePhone, primaryPhone } from "@/server/phone";
 import { parseDateOnly, tbilisiDateString } from "@/server/time";
@@ -494,26 +494,26 @@ export async function searchRecords(actor: Actor, query: string) {
         organizationId: actor.organizationId,
         mergedIntoId: null,
         OR: [
-          { name: { contains: q, mode: "insensitive" } },
+          { name: contains(q) },
           { identificationCode: { contains: q } },
           ...(phone ? [{ phoneNormalized: phone }] : []),
-          { phone: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-          { district: { contains: q, mode: "insensitive" } },
-          { venueType: { contains: q, mode: "insensitive" } },
-          { website: { contains: q, mode: "insensitive" } },
-          { addresses: { some: { line1: { contains: q, mode: "insensitive" } } } },
+          { phone: contains(q) },
+          { email: contains(q) },
+          { district: contains(q) },
+          { venueType: contains(q) },
+          { website: contains(q) },
+          { addresses: { some: { line1: contains(q) } } },
         ],
       },
       take: 40,
     }),
     getDb().productVariant.findMany({
-      where: { organizationId: actor.organizationId, OR: [{ sku: { contains: q, mode: "insensitive" } }, { nameKa: { contains: q, mode: "insensitive" } }] },
+      where: { organizationId: actor.organizationId, OR: [{ sku: contains(q) }, { nameKa: contains(q) }] },
       take: 20,
     }),
-    getDb().salesOrder.findMany({ where: { organizationId: actor.organizationId, number: { contains: q, mode: "insensitive" } }, take: 20 }),
+    getDb().salesOrder.findMany({ where: { organizationId: actor.organizationId, number: contains(q) }, take: 20 }),
     actor.permissions.has("finance.read")
-      ? getDb().invoice.findMany({ where: { organizationId: actor.organizationId, number: { contains: q, mode: "insensitive" } }, take: 20 })
+      ? getDb().invoice.findMany({ where: { organizationId: actor.organizationId, number: contains(q) }, take: 20 })
       : Promise.resolve([]),
   ]);
   return { customers, variants, orders, invoices };

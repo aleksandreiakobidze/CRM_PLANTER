@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RecordList } from "@/components/record-list";
 import { getActor } from "@/server/auth/session";
-import { getDb } from "@/server/db";
+import { contains, getDb } from "@/server/db";
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ q?: string; created?: string }> }) {
   const actor = await getActor();
@@ -9,7 +9,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const variants = await getDb().productVariant.findMany({
     where: {
       organizationId: actor.organizationId,
-      OR: params.q ? [{ sku: { contains: params.q, mode: "insensitive" } }, { nameKa: { contains: params.q, mode: "insensitive" } }] : undefined,
+      OR: params.q ? [{ sku: contains(params.q) }, { nameKa: contains(params.q) }] : undefined,
     },
     include: { product: true },
     orderBy: { sku: "asc" },

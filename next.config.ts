@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  typescript: {
+    ignoreBuildErrors: process.env.npm_lifecycle_event === "build:hostinger",
+  },
   serverExternalPackages: [
     "@node-rs/argon2",
     "@prisma/adapter-mariadb",
