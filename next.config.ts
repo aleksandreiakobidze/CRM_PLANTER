@@ -36,7 +36,6 @@ const nextConfig: NextConfig = {
     ...(hostinger
       ? {
           cpus: 1,
-          workerThreads: false,
           staticGenerationMaxConcurrency: 1,
           staticGenerationMinPagesPerWorker: 200,
         }

@@ -3,6 +3,8 @@ import { PwaRegister } from "@/components/pwa-register";
 import { ThemeProvider } from "@/context/theme-context";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL ?? "https://crm.planter.ge"),
   title: "Planter CRM",
