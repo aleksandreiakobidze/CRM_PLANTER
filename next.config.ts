@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
+const hostinger = process.env.npm_lifecycle_event === "build:hostinger";
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   typescript: {
-    ignoreBuildErrors: process.env.npm_lifecycle_event === "build:hostinger",
+    ignoreBuildErrors: hostinger,
   },
   serverExternalPackages: [
     "@node-rs/argon2",
@@ -30,6 +32,14 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
     optimizePackageImports: ["lucide-react"],
+    ...(hostinger
+      ? {
+          cpus: 1,
+          workerThreads: false,
+          staticGenerationMaxConcurrency: 1,
+          staticGenerationMinPagesPerWorker: 200,
+        }
+      : {}),
   },
 };
 
