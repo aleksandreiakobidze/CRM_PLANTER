@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { loginAction } from "@/server/actions/auth-actions";
 import { initialActionState } from "@/server/actions/state";
 
@@ -9,7 +10,10 @@ export default function LoginPage() {
   return (
     <main className="auth">
       <section className="auth-card card">
-        <img className="auth-logo" src="/brand/planter-logo.png" alt="Planter" />
+        <div className="row">
+          <img className="auth-logo" src="/brand/planter-logo.png" alt="Planter" />
+          <ThemeToggle />
+        </div>
         <div className="grid">
           <h1>შესვლა</h1>
           <p className="muted">სამუშაო ანგარიში. საჯარო რეგისტრაცია გამორთულია.</p>

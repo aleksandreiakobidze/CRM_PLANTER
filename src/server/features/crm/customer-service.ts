@@ -61,6 +61,7 @@ export async function createCustomer(
     kind: "company" | "person";
     name: string;
     legalName?: string;
+    directorName?: string;
     identificationCode?: string;
     segment?: string;
     relationshipStatus?: string;
@@ -98,7 +99,8 @@ export async function createCustomer(
         organizationId: actor.organizationId,
         kind: input.kind,
         name: input.name.trim(),
-        legalName: input.legalName,
+        legalName: blank(input.legalName),
+        directorName: blank(input.directorName),
         identificationCode: input.identificationCode,
         segment: input.segment || "other",
         relationshipStatus: status,
@@ -131,6 +133,8 @@ export async function updateCustomer(
   input: {
     kind: "company" | "person";
     name: string;
+    legalName?: string;
+    directorName?: string;
     identificationCode?: string;
     segment?: string;
     relationshipStatus?: string;
@@ -172,6 +176,8 @@ export async function updateCustomer(
       data: {
         kind: input.kind,
         name: input.name.trim(),
+        legalName: input.legalName?.trim() || null,
+        directorName: input.directorName?.trim() || null,
         identificationCode: input.identificationCode?.trim() || null,
         segment: input.segment || "other",
         relationshipStatus: status,

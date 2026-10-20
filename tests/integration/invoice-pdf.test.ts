@@ -29,9 +29,58 @@ describe("ინვოისის snapshot", () => {
     const snapshot = invoice.snapshot as InvoiceSnapshot;
     const html = invoiceHtml(snapshot, invoice.number ?? "");
     expect(html).toContain("ინვოისი");
+    expect(html).toContain("მიმწოდებელი");
+    expect(html).toContain("მომსახურების მიმღები");
+    expect(html).toContain("საბანკო რეკვიზიტები");
     expect(html).toContain("ძველი მისამართი 1");
     expect(html).not.toContain("ახალი მისამართი 9");
-    expect(html).toContain("1372.00");
+    expect(html).toContain("1,372.00");
+    expect(html).not.toContain("21.000");
     expect(html).toContain("RS-ზე");
+  });
+
+  it("ძველ snapshot-ს დირექტორის გარეშე PDF არ უტეხს", () => {
+    const html = invoiceHtml(
+      {
+        seller: {
+          name: "Planter",
+          legalName: "შპს პლანტერი",
+          identificationCode: "123",
+          address: "ძველი იურიდიული",
+          bankName: "ბანკი",
+          iban: "GE00TB0000000000000099",
+        },
+        buyer: {
+          name: "მყიდველი",
+          legalName: null,
+          identificationCode: null,
+          address: "ძველი მისამართი 1",
+        },
+        currency: "GEL",
+        lines: [
+          {
+            description: "მცენარის გაქირავება",
+            quantity: "21.000",
+            unitPrice: "65.3333",
+            discountAmount: "0.00",
+            taxAmount: "0.00",
+            lineTotal: "1372.00",
+          },
+        ],
+        subtotal: "1372.00",
+        taxTotal: "0.00",
+        adjustment: "0.00",
+        total: "1372.00",
+        issuedOn: "2026-10-16",
+        taxMode: "inclusive",
+        fiscalNote: "ეს არ არის RS-ზე რეგისტრირებული საგადასახადო დოკუმენტი.",
+      },
+      "INV-1",
+    );
+    expect(html).toContain("16 ოქტომბერი 2026");
+    expect(html).toContain(">21<");
+    expect(html).toContain("1,372.00");
+    expect(html).not.toContain("undefined");
+    expect(html).not.toContain("დირექტორი:");
   });
 });

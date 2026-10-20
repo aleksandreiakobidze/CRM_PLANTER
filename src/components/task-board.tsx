@@ -89,6 +89,7 @@ export function TaskBoard({ tasks, canMove }: { tasks: BoardTask[]; canMove: boo
         return (
           <section
             key={column.status}
+            data-status={column.status}
             className={`${over === column.status ? "column over" : "column"}${folded ? " collapsed" : ""}`}
             onDragOver={(event) => {
               if (!droppable) return;

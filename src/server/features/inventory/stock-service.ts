@@ -325,3 +325,145 @@ export async function companyOnHand(organizationId: string, variantId: string): 
   const rows = await getDb().stockBalance.findMany({ where: { organizationId, variantId } });
   return rows.reduce((sum, row) => sum.plus(D(row.onHand)), new Decimal(0));
 }
+
+export async function receiveIntoStock(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    variantId: string;
+    locationId: string;
+    quantity: Decimal;
+    unitCost: Decimal;
+    postingKey: string;
+    movementType: string;
+    sourceType: string;
+    sourceId: string;
+    reason?: string;
+  },
+) {
+  const variant = await tx.productVariant.findFirst({
+    where: { id: input.variantId, organizationId: actor.organizationId },
+  });
+  if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+  const balance = await lockBalance(tx, actor.organizationId, input.variantId, input.locationId);
+  const currentQty = D(balance.onHand);
+  const nextQty = currentQty.plus(input.quantity);
+  const average = nextQty.eq(0)
+    ? input.unitCost
+    : currentQty.mul(D(variant.averageCost)).plus(input.quantity.mul(input.unitCost)).div(nextQty);
+  const result = await changeBalance(tx, {
+    organizationId: actor.organizationId,
+    variantId: input.variantId,
+    locationId: input.locationId,
+    onHandDelta: input.quantity,
+    reservedDelta: new Decimal(0),
+    movement: {
+      quantity: input.quantity,
+      unitCost: input.unitCost,
+      movementType: input.movementType,
+      postingKey: input.postingKey,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      reason: input.reason,
+      actorId: actor.userId,
+    },
+  });
+  if (!result.skipped) {
+    await tx.productVariant.update({
+      where: { id: variant.id },
+      data: { averageCost: average.toFixed(4), unitCost: input.unitCost.toFixed(4) },
+    });
+  }
+  return result;
+}
+
+export async function issueFromStock(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    variantId: string;
+    locationId: string;
+    quantity: Decimal;
+    postingKey: string;
+    movementType: string;
+    sourceType: string;
+    sourceId: string;
+    reason?: string;
+  },
+) {
+  const variant = await tx.productVariant.findFirst({
+    where: { id: input.variantId, organizationId: actor.organizationId },
+  });
+  if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+  return changeBalance(tx, {
+    organizationId: actor.organizationId,
+    variantId: input.variantId,
+    locationId: input.locationId,
+    onHandDelta: input.quantity.neg(),
+    reservedDelta: new Decimal(0),
+    movement: {
+      quantity: input.quantity.neg(),
+      unitCost: D(variant.averageCost),
+      movementType: input.movementType,
+      postingKey: input.postingKey,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      reason: input.reason,
+      actorId: actor.userId,
+    },
+  });
+}
+
+export async function applyAverageCostAdjustment(tx: Tx, organizationId: string, variantId: string, extraAmount: Decimal) {
+  if (extraAmount.eq(0)) return;
+  const variant = await tx.productVariant.findFirst({ where: { id: variantId, organizationId } });
+  if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+  const rows = await tx.stockBalance.findMany({ where: { organizationId, variantId } });
+  const onHand = rows.reduce((sum, row) => sum.plus(D(row.onHand)), new Decimal(0));
+  if (onHand.lte(0)) return;
+  const nextAvg = D(variant.averageCost).plus(extraAmount.div(onHand));
+  await tx.productVariant.update({
+    where: { id: variant.id },
+    data: { averageCost: nextAvg.toFixed(4) },
+  });
+}
+
+export async function transferStock(
+  actor: Actor,
+  input: {
+    variantId: string;
+    fromLocationId: string;
+    toLocationId: string;
+    quantity: string;
+    postingKey: string;
+  },
+) {
+  requirePermission(actor, "stock.write");
+  const quantity = D(input.quantity);
+  if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
+  if (input.fromLocationId === input.toLocationId) throw new BusinessError("ლოკაცია უნდა განსხვავდებოდეს", "validation");
+  try {
+    return await withTx(async (tx) => {
+      const variant = await tx.productVariant.findFirst({
+        where: { id: input.variantId, organizationId: actor.organizationId },
+      });
+      if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+      await transferQuantity(tx, {
+        organizationId: actor.organizationId,
+        variantId: input.variantId,
+        fromLocationId: input.fromLocationId,
+        toLocationId: input.toLocationId,
+        quantity,
+        unitCost: D(variant.averageCost),
+        postingKey: input.postingKey,
+        sourceType: "transfer",
+        sourceId: input.postingKey,
+        actorId: actor.userId,
+      });
+      return { postingKey: input.postingKey };
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return { postingKey: input.postingKey };
+  }
+}

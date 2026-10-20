@@ -4,6 +4,7 @@ import { getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListParams } from "@/server/features/crm/customer-list";
 import { listBalances } from "@/server/features/inventory/stock-service";
+import { opsDashboard } from "@/server/features/reports/ops-reports";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
@@ -27,6 +28,9 @@ const STATUS_LABEL: Record<string, string> = {
   confirmed: "დადასტურებული",
   cancelled: "გაუქმებული",
   fulfilled: "გაცემული",
+  open: "ღია",
+  authorized: "ავტორიზებული",
+  rs_error: "RS შეცდომა",
   available: "თავისუფალი",
   reserved: "დაჯავშნილი",
   on_rent: "გაქირავებული",
@@ -385,40 +389,19 @@ export async function maintenanceWorkbook(actor: Actor): Promise<ExportFile> {
 }
 
 export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
-  const [programs, bookings] = await Promise.all([
-    getDb().excursionProgram.findMany({ where: { organizationId: actor.organizationId }, orderBy: { nameKa: "asc" } }),
-    getDb().excursionBooking.findMany({
-      where: { organizationId: actor.organizationId },
-      include: { customer: true, program: true },
-      orderBy: { startsAt: "asc" },
-    }),
-  ]);
+  const bookings = await getDb().excursionBooking.findMany({
+    where: { organizationId: actor.organizationId },
+    include: { customer: true, program: true },
+    orderBy: { startsAt: "asc" },
+  });
   return file("ექსკურსიები", "excursions", [
-    {
-      name: "პროგრამები",
-      columns: [
-        { header: "პროგრამა", kind: "text", width: 28 },
-        { header: "წუთი", kind: "int" },
-        { header: "ფასი ბავშვზე", kind: "money" },
-        { header: "მინიმუმი", kind: "int" },
-        { header: "ტევადობა", kind: "int" },
-        { header: "ფანჯარა", kind: "text" },
-      ],
-      rows: programs.map((program) => [
-        program.nameKa,
-        program.durationMinutes,
-        excelNumber(program.pricePerChild, 2),
-        program.minBillable,
-        program.maxCapacity,
-        `${program.windowStart}–${program.windowEnd}`,
-      ]),
-    },
     {
       name: "ჯავშნები",
       columns: [
         { header: "ნომერი", kind: "text", width: 16 },
         { header: "კლიენტი", kind: "text", width: 28 },
-        { header: "პროგრამა", kind: "text", width: 24 },
+        { header: "შენიშვნა", kind: "text", width: 28 },
+        { header: "ფასი", kind: "money" },
         { header: "სტატუსი", kind: "text" },
         { header: "დაწყება", kind: "text", width: 18 },
         { header: "დასრულება", kind: "text", width: 18 },
@@ -429,7 +412,8 @@ export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
       rows: bookings.map((booking) => [
         booking.number,
         booking.customer.name,
-        booking.program.nameKa,
+        booking.note.trim() || booking.program?.nameKa || "",
+        excelNumber(booking.price, 2),
         documentStatus(booking.status),
         when(booking.startsAt),
         when(booking.endsAt),
@@ -439,6 +423,40 @@ export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
       ]),
     },
   ]);
+}
+
+export async function reportsWorkbook(actor: Actor, fromIso: string, toIso: string): Promise<ExportFile> {
+  const from = fromIso || "2026-01-01";
+  const to = toIso || from;
+  const data = await opsDashboard(actor, from, to);
+  return file("რეპორტები", "reports", [
+    {
+      name: "KPI",
+      columns: [
+        { header: "მაჩვენებელი", kind: "text", width: 22 },
+        { header: "თანხა", kind: "money" },
+        { header: "ბაზისი", kind: "text", width: 40, wrap: true },
+      ],
+      rows: [
+        ["გაყიდული", excelNumber({ toString: () => data.sales.sold }, 2), data.sales.basis.sold],
+        ["დარიცხული", excelNumber({ toString: () => data.sales.invoiced }, 2), data.sales.basis.invoiced],
+        ["შემოსული", excelNumber({ toString: () => data.sales.received }, 2), data.sales.basis.received],
+        ["ვადაგადაცილება", excelNumber({ toString: () => data.overdue }, 2), "ინვოისის remaining"],
+        ["ინტეგრაცია", null, data.integration],
+      ],
+    },
+    {
+      name: "დავალიანება",
+      columns: [
+        { header: "ინვოისი", kind: "text" },
+        { header: "კლიენტი", kind: "text", width: 24 },
+        { header: "დარჩენილი", kind: "money", total: true },
+        { header: "დღეები", kind: "int" },
+        { header: "ჯგუფი", kind: "text" },
+      ],
+      rows: data.aging.map((row) => [row.number, row.customer, excelNumber({ toString: () => row.remaining }, 2), row.days, row.bucket]),
+    },
+  ], `${from} — ${to}`);
 }
 
 const BUILDERS = {
@@ -460,6 +478,7 @@ const BUILDERS = {
   rental: (actor: Actor) => rentalWorkbook(actor),
   maintenance: (actor: Actor) => maintenanceWorkbook(actor),
   excursions: (actor: Actor) => excursionsWorkbook(actor),
+  reports: (actor: Actor, url: URL) => reportsWorkbook(actor, url.searchParams.get("from") ?? "", url.searchParams.get("to") ?? ""),
 } as const;
 
 export async function buildExport(kind: string, actor: Actor, url: URL): Promise<ExportFile> {

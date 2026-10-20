@@ -41,3 +41,8 @@ export function monthlyMaintenanceFee(base: Decimal, percent: Decimal): Decimal 
 export function moneyText(value: Decimal): string {
   return roundMoney(value).toFixed(2);
 }
+
+export function moneyPrint(value: Decimal.Value | { toString(): string }): string {
+  const [whole, fraction] = moneyText(D(value)).split(".");
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction}`;
+}

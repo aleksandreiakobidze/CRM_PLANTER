@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { getActor } from "@/server/auth/session";
 import { createVariant } from "@/server/features/catalog/catalog-service";
 import { addActivity, addAddress, addContact, cancelTask, completeAssignment, createCustomer, createTask, reopenTask, rescheduleTask, setTaskStatus, updateCustomer } from "@/server/features/crm/customer-service";
-import { bookExcursion, completeExcursion, createProgram } from "@/server/features/excursions/excursion-service";
-import { createInvoiceFromOrder } from "@/server/features/finance/invoice-service";
+import { bookExcursion, completeExcursion } from "@/server/features/excursions/excursion-service";
+import { createInvoiceFromOrder, createInvoiceFromRental } from "@/server/features/finance/invoice-service";
 import { recordPayment } from "@/server/features/finance/payment-service";
 import { confirmOpeningStock, confirmCustomerImport, dryRunCustomers, dryRunOpeningStock, dryRunProducts } from "@/server/features/import/import-service";
 import { postOpeningStock } from "@/server/features/inventory/stock-service";
@@ -28,6 +28,8 @@ export async function createCustomerAction(_prev: ActionState, formData: FormDat
     const customer = await createCustomer(actor, {
       kind: String(formData.get("kind")) === "person" ? "person" : "company",
       name: String(formData.get("name") ?? ""),
+      legalName: String(formData.get("legalName") ?? ""),
+      directorName: String(formData.get("directorName") ?? ""),
       phone: String(formData.get("phone") ?? ""),
       email: String(formData.get("email") ?? ""),
       identificationCode: String(formData.get("identificationCode") ?? ""),
@@ -63,6 +65,8 @@ export async function updateCustomerAction(customerId: string, _prev: ActionStat
     await updateCustomer(actor, customerId, {
       kind: String(formData.get("kind")) === "person" ? "person" : "company",
       name: String(formData.get("name") ?? ""),
+      legalName: String(formData.get("legalName") ?? ""),
+      directorName: String(formData.get("directorName") ?? ""),
       phone: String(formData.get("phone") ?? ""),
       email: String(formData.get("email") ?? ""),
       identificationCode: String(formData.get("identificationCode") ?? ""),
@@ -246,17 +250,21 @@ export async function openingStockAction(_prev: ActionState, formData: FormData)
 export async function createQuoteAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
+    const rawLines = String(formData.get("lines") ?? "");
+    const { parseDocumentLines } = await import("@/server/features/sales/order-service");
     const quote = await createQuote(actor, {
       customerId: String(formData.get("customerId") ?? ""),
       notes: String(formData.get("notes") ?? ""),
-      lines: [
-        {
-          variantId: String(formData.get("variantId") ?? ""),
-          quantity: String(formData.get("quantity") ?? ""),
-          unitPrice: String(formData.get("unitPrice") ?? "") || undefined,
-          discountAmount: String(formData.get("discountAmount") ?? "0"),
-        },
-      ],
+      lines: rawLines
+        ? parseDocumentLines(rawLines)
+        : [
+            {
+              variantId: String(formData.get("variantId") ?? ""),
+              quantity: String(formData.get("quantity") ?? ""),
+              unitPrice: String(formData.get("unitPrice") ?? "") || undefined,
+              discountAmount: String(formData.get("discountAmount") ?? "0"),
+            },
+          ],
     });
     redirect(`/sales/quotes/${quote.id}`);
   } catch (error) {
@@ -295,15 +303,25 @@ export async function invoiceOrderAction(orderId: string): Promise<void> {
   redirect(`/finance/invoices/${invoice.id}`);
 }
 
+export async function invoiceRentalAction(bookingId: string): Promise<void> {
+  const actor = await getActor();
+  const invoice = await createInvoiceFromRental(actor, bookingId);
+  redirect(`/finance/invoices/${invoice.id}`);
+}
+
 export async function paymentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
     const invoiceId = String(formData.get("invoiceId") ?? "");
+    const method = String(formData.get("method") ?? "");
+    if (!["cash", "bank", "online"].includes(method)) {
+      throw new BusinessError("გადახდის მეთოდი არასწორია", "validation");
+    }
     const invoice = await getDb().invoice.findFirstOrThrow({ where: { id: invoiceId, organizationId: actor.organizationId } });
     await recordPayment(actor, {
       customerId: invoice.customerId,
       amount: String(formData.get("amount") ?? ""),
-      method: "bank",
+      method,
       paidOn: String(formData.get("paidOn") ?? ""),
       postingKey: String(formData.get("postingKey") ?? ""),
       allocations: [{ invoiceId, amount: String(formData.get("amount") ?? "") }],
@@ -318,13 +336,17 @@ export async function paymentAction(_prev: ActionState, formData: FormData): Pro
 export async function bookRentalAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
+    const rawLines = String(formData.get("lines") ?? "");
+    const { parseDocumentLines } = await import("@/server/features/sales/order-service");
+    const priced = rawLines ? parseDocumentLines(rawLines) : [];
     const booking = await bookRental(actor, {
       customerId: String(formData.get("customerId") ?? ""),
-      assetIds: [String(formData.get("assetId") ?? "")],
+      assetIds: priced.length ? priced.map((line) => line.variantId) : [String(formData.get("assetId") ?? "")],
+      lines: priced.length ? priced.map((line) => ({ assetId: line.variantId, unitPrice: line.unitPrice ?? "0" })) : undefined,
       startOn: String(formData.get("startOn") ?? ""),
       endOn: String(formData.get("endOn") ?? ""),
-      priceModel: "fixed_total",
-      total: String(formData.get("total") ?? ""),
+      priceModel: priced.length ? "line" : "fixed_total",
+      total: priced.length ? undefined : String(formData.get("total") ?? ""),
       depositAmount: String(formData.get("depositAmount") ?? "0"),
       postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
     });
@@ -421,34 +443,18 @@ export async function replacePlantAction(plantId: string, _prev: ActionState, fo
   }
 }
 
-export async function createProgramAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  try {
-    const actor = await getActor();
-    await createProgram(actor, {
-      nameKa: String(formData.get("nameKa") ?? ""),
-      durationMinutes: Number(formData.get("durationMinutes") ?? 120),
-      pricePerChild: String(formData.get("pricePerChild") ?? "0"),
-      maxCapacity: Number(formData.get("maxCapacity") ?? 20),
-      variantId: String(formData.get("variantId") ?? ""),
-    });
-    revalidatePath("/excursions");
-    return done("პროგრამა შეიქმნა");
-  } catch (error) {
-    return { ok: false, message: publicMessage(error) };
-  }
-}
-
 export async function bookExcursionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
     const date = String(formData.get("date") ?? "");
     const booking = await bookExcursion(actor, {
       customerId: String(formData.get("customerId") ?? ""),
-      programId: String(formData.get("programId") ?? ""),
       resourceId: String(formData.get("resourceId") ?? ""),
       startsAt: zonedDateTime(date, String(formData.get("startTime") ?? "13:00")),
       endsAt: zonedDateTime(date, String(formData.get("endTime") ?? "15:00")),
       plannedChildren: Number(formData.get("plannedChildren") ?? 1),
+      note: String(formData.get("note") ?? ""),
+      price: String(formData.get("price") ?? "0"),
       postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
       windowException: formData.get("windowException") === "yes",
     });
@@ -515,6 +521,7 @@ export async function saveOrganizationAction(_prev: ActionState, formData: FormD
         bankName: String(formData.get("bankName") ?? ""),
         iban: String(formData.get("iban") ?? ""),
         directorName: String(formData.get("directorName") ?? ""),
+        autoInvoiceAfterWaybill: formData.get("autoInvoiceAfterWaybill") === "on",
       },
     });
     revalidatePath("/settings");

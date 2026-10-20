@@ -1,0 +1,22 @@
+{
+  "name": "Planter CRM",
+  "short_name": "Planter",
+  "description": "Planter-ის გაყიდვები, მარაგი, გაქირავება და მოვლა",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4efe6",
+  "theme_color": "#1a2e24",
+  "lang": "ka",
+  "icons": [
+    {
+      "src": "/brand/planter-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/planter-mark.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

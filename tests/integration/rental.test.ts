@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createCustomer } from "@/server/features/crm/customer-service";
+import { createInvoiceFromRental, invoiceHtml, type InvoiceSnapshot } from "@/server/features/finance/invoice-service";
 import { companyOnHand } from "@/server/features/inventory/stock-service";
 import { rentalRevenue, bookRental, createRentalAsset, deliverRental, rentalBillingDays, returnRentalAssets } from "@/server/features/rental/rental-service";
+import { D } from "@/server/money";
 import { getDb } from "@/server/db";
 import { makeSellable, makeWorld } from "../helpers";
 
@@ -68,5 +70,35 @@ describe("გაქირავება", () => {
     expect(damaged.status).toBe("damaged");
     const available = await getDb().rentalAsset.count({ where: { id: firstAsset.id, status: "available" } });
     expect(available).toBe(0);
+  });
+
+  it("ჯავშნიდან ერთი ინვოისი იწერება და დეპოზიტი არ შედის", async () => {
+    const { actor } = await makeWorld();
+    const { variant } = await makeSellable(actor, `RENTINV-${actor.userId.slice(-4)}`, "2", "11");
+    const customer = await createCustomer(actor, { kind: "company", name: "სატესტო ინვოისი გაქირავება" });
+    const asset = await createRentalAsset(actor, { variantId: variant.id, code: `INV-${actor.userId.slice(-4)}` });
+    const booking = await bookRental(actor, {
+      customerId: customer.id,
+      assetIds: [asset.id],
+      startOn: "2026-11-21",
+      endOn: "2026-11-23",
+      priceModel: "fixed_total",
+      total: "1372",
+      depositAmount: "100",
+      postingKey: `rent-inv-${asset.id}`,
+    });
+    const invoice = await createInvoiceFromRental(actor, booking.id);
+    const again = await createInvoiceFromRental(actor, booking.id);
+    expect(again.id).toBe(invoice.id);
+    expect(D(invoice.total).toFixed(2)).toBe("1372.00");
+    expect(D(invoice.total).toFixed(2)).not.toBe("1472.00");
+    const snapshot = invoice.snapshot as InvoiceSnapshot;
+    expect(snapshot.lines).toHaveLength(1);
+    expect(snapshot.lines[0]?.description).toBe("მცენარის გაქირავება");
+    expect(snapshot.lines[0]?.quantity).toBe("1.000");
+    const html = invoiceHtml(snapshot, invoice.number ?? "");
+    expect(html).toContain("მცენარის გაქირავება");
+    expect(html).toContain("1,372.00");
+    expect(html).not.toContain("100.00");
   });
 });

@@ -1,40 +1,204 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { cancelOrderAction, confirmOrderAction, fulfillOrderAction, invoiceOrderAction } from "@/server/actions/work-actions";
+import { BoundForm } from "@/components/bound-form";
+import { ComboBox } from "@/components/combo-box";
+import { DocTabs } from "@/components/doc-tabs";
+import { HeaderLinesForm } from "@/components/header-lines-form";
+import { RsFields } from "@/components/rs-fields";
+import { creditNoteAction, returnGoodsAction } from "@/server/actions/ops-actions";
+import { cancelOrderAction, confirmOrderAction, invoiceOrderAction } from "@/server/actions/work-actions";
+import { completeSaleAction, retrySaleAction, updateOpenOrderAction } from "@/server/actions/waybill-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { orderStatusLabel } from "@/server/labels";
+import { D } from "@/server/money";
+import { tbilisiDateString } from "@/server/time";
 
-export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+function dateOnly(value: Date | null): string {
+  if (!value) return "";
+  return value.toISOString().slice(0, 10);
+}
+
+const BADGE: Record<string, string> = {
+  open: "stone-badge",
+  draft: "stone-badge",
+  authorized: "warn-badge",
+  confirmed: "warn-badge",
+  completed: "ok-badge",
+  fulfilled: "ok-badge",
+  rs_error: "err-badge",
+  cancelled: "stone-badge",
+};
+
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const actor = await getActor();
   const { id } = await params;
-  const order = await getDb().salesOrder.findFirst({
-    where: { id, organizationId: actor.organizationId },
-    include: { lines: true, customer: true, invoices: true },
-  });
+  const { tab: requested } = await searchParams;
+  const [order, organization, customers, variants] = await Promise.all([
+    getDb().salesOrder.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      include: { lines: true, customer: true, invoices: true, fulfillments: { orderBy: { fulfilledAt: "desc" }, take: 1 } },
+    }),
+    getDb().organization.findUniqueOrThrow({ where: { id: actor.organizationId } }),
+    getDb().customer.findMany({ where: { organizationId: actor.organizationId, mergedIntoId: null }, orderBy: { name: "asc" } }),
+    getDb().productVariant.findMany({ where: { organizationId: actor.organizationId, active: true }, orderBy: { sku: "asc" } }),
+  ]);
   if (!order) notFound();
+  const fulfillment = order.fulfillments[0];
+  const issued = order.status === "completed" || order.status === "rs_error" || order.status === "fulfilled";
+  const open = order.status === "open" || order.status === "draft";
+  const authorized = order.status === "authorized" || order.status === "confirmed";
+  const total = order.lines.reduce((sum, line) => sum.plus(D(line.lineTotal)), D(0));
+  const base = `/sales/orders/${order.id}`;
+  const tabs = [
+    { id: "order", label: "შეკვეთა", href: base },
+    { id: "delivery", label: "მიწოდება", href: `${base}?tab=delivery` },
+    ...(issued ? [{ id: "return", label: "დაბრუნება", href: `${base}?tab=return` }] : []),
+  ];
+  const tab = tabs.some((item) => item.id === requested) ? requested! : "order";
+  const rsValues = {
+    waybillType: fulfillment?.waybillType ?? 2,
+    driverTin: fulfillment?.driverTin,
+    driverName: fulfillment?.driverName,
+    carNumber: fulfillment?.carNumber,
+    transportText: fulfillment?.transportText,
+    startAddress: fulfillment?.startAddress || organization.address || "",
+    endAddress: fulfillment?.endAddress || "",
+    beginOn: dateOnly(fulfillment?.beginOn ?? null),
+  };
   return (
-    <section className="grid">
-      <div className="page-head">
-        <Link className="back" href="/sales/quotes">შეთავაზებები</Link>
-        <h1>{order.number}</h1>
-        <p>{order.customer.name} · {order.status}</p>
+    <section className="grid doc">
+      <div className="doc-head">
+        <div className="page-head">
+          <Link className="back" href="/sales/orders">შეკვეთები</Link>
+          <h1>{order.number}</h1>
+          <p>{order.customer.name}</p>
+        </div>
+        <div className="doc-side">
+          <span className={`badge ${BADGE[order.status] ?? "stone-badge"}`}>{orderStatusLabel(order.status)}</span>
+          <p className="doc-total">{total.toFixed(2)} ₾</p>
+        </div>
       </div>
-      <div className="card">
-        <table>
-          <tbody>
-            {order.lines.map((line) => (
-              <tr key={line.id}><td>{line.description}</td><td>{line.quantity.toString()}</td><td>{line.lineTotal.toString()} ₾</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="row">
-        {order.status === "draft" ? <form action={confirmOrderAction.bind(null, order.id)}><button type="submit">დაჯავშნა</button></form> : null}
-        {order.status === "confirmed" ? <form action={fulfillOrderAction.bind(null, order.id)}><button type="submit">მიწოდების დადასტურება</button></form> : null}
-        {order.status === "draft" || order.status === "confirmed" ? <form action={cancelOrderAction.bind(null, order.id)}><button className="secondary" type="submit">გაუქმება</button></form> : null}
-        {order.status === "fulfilled" && order.invoices.length === 0 ? <form action={invoiceOrderAction.bind(null, order.id)}><button type="submit">ინვოისის შექმნა</button></form> : null}
-        {order.invoices[0] ? <a className="button" href={`/finance/invoices/${order.invoices[0].id}`}>ინვოისი</a> : null}
-      </div>
+      <DocTabs label="დოკუმენტის ტაბები" tabs={tabs} current={tab} />
+      {tab === "order" ? (
+        <div className="card doc-card">
+          {open ? (
+            <HeaderLinesForm
+              action={updateOpenOrderAction}
+              label="შენახვა"
+              mode="sale"
+              partyName="customerId"
+              partyLabel="კლიენტი"
+              partyDefault={order.customerId}
+              parties={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+              items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
+              initialLines={order.lines.map((line) => ({
+                itemId: line.variantId,
+                quantity: line.quantity.toString(),
+                unitPrice: line.unitPrice.toString(),
+                discountAmount: line.discountAmount.toString(),
+              }))}
+              extra={<><input type="hidden" name="orderId" value={order.id} /><label>შენიშვნა<textarea name="notes" defaultValue={order.notes ?? ""} /></label></>}
+            />
+          ) : (
+            <>
+              <table>
+                <thead><tr><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
+                <tbody>
+                  {order.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td>{line.description}</td>
+                      <td>{line.quantity.toString()}</td>
+                      <td>{line.unitPrice.toString()}</td>
+                      <td>{line.lineTotal.toString()} ₾</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {order.notes ? <p className="note">{order.notes}</p> : null}
+            </>
+          )}
+          <div className="doc-actions">
+            {open ? <form action={confirmOrderAction.bind(null, order.id)}><button type="submit">ავტორიზება</button></form> : null}
+            {open || authorized ? (
+              <form action={cancelOrderAction.bind(null, order.id)}><button className="secondary" type="submit">გაუქმება</button></form>
+            ) : null}
+            {issued && order.invoices.length === 0 ? <form action={invoiceOrderAction.bind(null, order.id)}><button type="submit">ინვოისის შექმნა</button></form> : null}
+            {order.invoices[0] ? <a className="button" href={`/finance/invoices/${order.invoices[0].id}`}>ინვოისი</a> : null}
+          </div>
+        </div>
+      ) : null}
+      {tab === "delivery" ? (
+        <div className="card doc-card">
+          <h2 className="doc-title">მიწოდება</h2>
+          {open ? <p>მიწოდების ველები ავტორიზების შემდეგ ივსება. მანამდე მარაგი არ იძვრის.</p> : null}
+          {authorized ? (
+            <>
+              <p>დასრულება მარაგს ერთხელ ჩამოწერს და ზედნადებს RS.ge-ზე ტვირთავს. ინვოისი იქმნება მხოლოდ ზედნადების ნომრის შემდეგ, თუ ჩეკბოქსი ჩართულია.</p>
+              <BoundForm action={completeSaleAction} label="დასრულება">
+                <input type="hidden" name="orderId" value={order.id} />
+                <RsFields values={rsValues} beginDefault={tbilisiDateString()} saleType invoiceDefault={organization.autoInvoiceAfterWaybill} />
+              </BoundForm>
+            </>
+          ) : null}
+          {order.status === "rs_error" && fulfillment ? (
+            <>
+              {fulfillment.rsError ? <p className="err">{fulfillment.rsError}</p> : null}
+              <p>მარაგი უკვე ჩამოწერილია. ეს ღილაკი მხოლოდ RS-ს იმეორებს.</p>
+              <BoundForm action={retrySaleAction} label="თავიდან ატვირთვა">
+                <input type="hidden" name="orderId" value={order.id} />
+                <RsFields values={rsValues} beginDefault={tbilisiDateString()} saleType invoiceDefault={organization.autoInvoiceAfterWaybill} />
+              </BoundForm>
+            </>
+          ) : null}
+          {order.status === "cancelled" ? <p>გაუქმებული შეკვეთა აღარ მიეწოდება.</p> : null}
+          {order.status === "completed" || order.status === "fulfilled" ? (
+            <div className="fact-row">
+              <p><small>RS ზედნადები</small>{fulfillment?.rsWaybillNumber || "—"}</p>
+              <p><small>მძღოლი</small>{fulfillment?.driverName || "—"}</p>
+              <p><small>მანქანა</small>{fulfillment?.carNumber || "—"}</p>
+              <p><small>საიდან</small>{fulfillment?.startAddress || "—"}</p>
+              <p><small>სად</small>{fulfillment?.endAddress || "—"}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {tab === "return" && issued ? (
+        <div className="card doc-card">
+          <h2 className="doc-title">დაბრუნება</h2>
+          <p>რაოდენობა არ უნდა აღემატებოდეს მიწოდებულს. დაზიანებული საკარანტინოში მიდის.</p>
+          <BoundForm action={returnGoodsAction} label="დაბრუნება">
+            <input type="hidden" name="orderId" value={order.id} />
+            <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
+            <label>ხაზი
+              <ComboBox
+                name="orderLineId"
+                options={order.lines.map((line) => ({
+                  value: line.id,
+                  label: `${line.description} · დარჩა ${D(line.fulfilledQty).minus(line.returnedQty).toFixed(3)}`,
+                }))}
+              />
+            </label>
+            <label>რაოდენობა<input name="quantity" required /></label>
+            <label>მდგომარეობა
+              <ComboBox name="condition" options={[{ value: "healthy", label: "ჯანმრთელი" }, { value: "damaged", label: "დაზიანებული" }]} />
+            </label>
+            <label>მიზეზი<input name="reason" required /></label>
+          </BoundForm>
+          <BoundForm action={creditNoteAction} label="კრედიტ-ნოტა">
+            <input type="hidden" name="customerId" value={order.customerId} />
+            <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
+            <label>თანხა<input name="amount" required /></label>
+            <label>აღწერა<input name="description" defaultValue={`${order.number} კრედიტი`} /></label>
+          </BoundForm>
+        </div>
+      ) : null}
     </section>
   );
 }

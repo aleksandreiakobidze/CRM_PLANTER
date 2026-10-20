@@ -22,6 +22,9 @@ export const PERMISSIONS = [
   "admin.users",
   "reports.read",
   "task.read.all",
+  "purchase.write",
+  "delivery.read",
+  "delivery.write",
 ] as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[number];
@@ -46,15 +49,18 @@ export const ROLE_PRESETS: Record<string, { nameKa: string; permissions: Permiss
       "excursion.write",
       "catalog.read",
       "task.read.all",
+      "purchase.write",
+      "delivery.read",
+      "delivery.write",
     ],
   },
-  warehouse: { nameKa: "სათბური / საწყობი", permissions: ["stock.read", "stock.write", "catalog.read"] },
+  warehouse: { nameKa: "სათბური / საწყობი", permissions: ["stock.read", "stock.write", "catalog.read", "purchase.write"] },
   agronomist: { nameKa: "აგრონომი", permissions: ["maintenance.read", "maintenance.write", "catalog.read"] },
   excursion_coordinator: {
     nameKa: "ექსკურსიის კოორდინატორი",
     permissions: ["excursion.read", "excursion.write", "crm.read", "crm.write"],
   },
-  driver: { nameKa: "მძღოლი", permissions: ["stock.read"] },
+  driver: { nameKa: "მძღოლი", permissions: ["stock.read", "delivery.read"] },
   finance: {
     nameKa: "ფინანსები",
     permissions: ["finance.read", "finance.write", "reports.read", "crm.read", "sales.read"],

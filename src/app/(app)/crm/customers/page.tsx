@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { ComboBox } from "@/components/combo-box";
-import { RecordList } from "@/components/record-list";
+import { CustomerBoard } from "@/components/customer-board";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListFilters, type CustomerListParams } from "@/server/features/crm/customer-list";
-import { PRIORITY, statusBadge, VERIFICATION } from "@/server/labels";
+import { statusBadge } from "@/server/labels";
 import { displayPhone } from "@/server/phone";
 
 const STATUSES = [
@@ -54,88 +58,90 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   });
   const active = Object.values(filters).some(Boolean);
   return (
-    <section className="grid">
-      <div className="page-head">
-        <div className="row">
-          <h1>კლიენტები</h1>
-          <div className="actions">
-            <Link className="button secondary" href={exportHref(filters)}>Excel</Link>
-            <Link className="button" href="/crm/customers/new">ახალი კლიენტი</Link>
-          </div>
+    <section className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90">კლიენტები</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {active ? `${customers.length} ნაჩვენებია, სულ ${total}` : `${total} ობიექტი`}
+          </p>
         </div>
-        <p>{active ? `${customers.length} ნაჩვენებია, სულ ${total}` : `${total} ობიექტი`}</p>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="secondary">
+            <Link href={exportHref(filters)}>Excel</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/crm/customers/new">ახალი კლიენტი</Link>
+          </Button>
+        </div>
       </div>
-      <form className="filters" role="search" aria-label="კლიენტების ფილტრი">
-        <label>ძებნა
-          <input name="q" defaultValue={filters.q} placeholder="სახელი, ტელეფონი, მისამართი" />
-        </label>
-        <label>ტიპი
-          <ComboBox name="type" options={[{ value: "", label: "ყველა" }, ...types.map((value) => ({ value, label: value }))]} defaultValue={filters.type} />
-        </label>
-        <label>ზონა
-          <ComboBox name="zone" options={[{ value: "", label: "ყველა" }, ...zones.map((value) => ({ value, label: value }))]} defaultValue={filters.zone} />
-        </label>
-        <label>პრიორიტეტი
-          <ComboBox name="priority" options={PRIORITY_FILTER} defaultValue={filters.priority} />
-        </label>
-        <label>სტატუსი
-          <ComboBox name="status" options={STATUSES} defaultValue={filters.status} />
-        </label>
-        <label>ტელეფონი
-          <ComboBox name="phone" options={PRESENCE} defaultValue={filters.phone} />
-        </label>
-        <label>ვებგვერდი
-          <ComboBox name="web" options={PRESENCE} defaultValue={filters.web} />
-        </label>
-        <label>ვერიფიკაცია
-          <ComboBox name="verified" options={VERIFIED} defaultValue={filters.verified} />
-        </label>
-        <div className="filter-actions">
-          <button type="submit">ჩვენება</button>
-          {active ? <Link className="button secondary" href="/crm/customers">გასუფთავება</Link> : null}
-        </div>
-      </form>
-      <RecordList
-        storageKey="customers"
-        empty={active ? "ამ ფილტრს არაფერი ემთხვევა." : "კლიენტი ჯერ არ არის."}
-        columns={[
-          { key: "name", header: "ობიექტი" },
-          { key: "type", header: "ტიპი" },
-          { key: "zone", header: "ზონა" },
-          { key: "priority", header: "პრიორიტეტი" },
-          { key: "phone", header: "ტელეფონი" },
-          { key: "status", header: "სტატუსი" },
-          { key: "edit", header: "" },
-        ]}
-        rows={customers.map((customer) => {
-          const badge = statusBadge(customer.relationshipStatus);
-          const priority = customer.priority ? PRIORITY[customer.priority] : null;
-          const verified = customer.verification ? VERIFICATION[customer.verification] : null;
-          const address = customer.addresses[0]?.line1;
-          return {
-            id: customer.id,
-            cells: {
-              name: (
-                <span className="who">
-                  <Link href={`/crm/customers/${customer.id}`}>{customer.name}</Link>
-                  {address ? <small>{address}</small> : null}
-                </span>
-              ),
-              type: customer.venueType || "—",
-              zone: customer.district || "—",
-              priority: priority ? <span className="badge" title={priority.hint} style={{ background: priority.color, color: "white" }}>{priority.short}</span> : "—",
+      <Card className="p-5">
+        <form className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="search" aria-label="კლიენტების ფილტრი">
+          <div className="min-w-0">
+            <Label htmlFor="customer-q">ძებნა</Label>
+            <Input id="customer-q" name="q" defaultValue={filters.q} placeholder="სახელი, ტელეფონი, მისამართი" />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-type">ტიპი</Label>
+            <ComboBox name="type" options={[{ value: "", label: "ყველა" }, ...types.map((value) => ({ value, label: value }))]} defaultValue={filters.type} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-zone">ზონა</Label>
+            <ComboBox name="zone" options={[{ value: "", label: "ყველა" }, ...zones.map((value) => ({ value, label: value }))]} defaultValue={filters.zone} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-priority">პრიორიტეტი</Label>
+            <ComboBox name="priority" options={PRIORITY_FILTER} defaultValue={filters.priority} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-status">სტატუსი</Label>
+            <ComboBox name="status" options={STATUSES} defaultValue={filters.status} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-phone">ტელეფონი</Label>
+            <ComboBox name="phone" options={PRESENCE} defaultValue={filters.phone} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-web">ვებგვერდი</Label>
+            <ComboBox name="web" options={PRESENCE} defaultValue={filters.web} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-verified">ვერიფიკაცია</Label>
+            <ComboBox name="verified" options={VERIFIED} defaultValue={filters.verified} />
+          </div>
+          <div className="flex items-end gap-2">
+            <Button type="submit">ჩვენება</Button>
+            {active ? (
+              <Button asChild variant="secondary">
+                <Link href="/crm/customers">გასუფთავება</Link>
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      </Card>
+      {customers.length === 0 ? (
+        <Card className="p-5">
+          <p className="text-sm text-gray-500 dark:text-gray-400">{active ? "ამ ფილტრს არაფერი ემთხვევა." : "კლიენტი ჯერ არ არის."}</p>
+        </Card>
+      ) : (
+        <CustomerBoard
+          key={JSON.stringify(filters)}
+          customers={customers.map((customer) => {
+            const status = statusBadge(customer.relationshipStatus);
+            return {
+              id: customer.id,
+              name: customer.name,
+              type: customer.venueType || "",
+              zone: customer.district || "",
               phone: displayPhone(customer.phone, customer.phoneNormalized),
-              status: (
-                <span className="who">
-                  <span className="badge" style={{ background: badge.color, color: "white" }}>{badge.label}</span>
-                  {verified ? <small>{verified.label}</small> : null}
-                </span>
-              ),
-              edit: <Link className="button secondary" href={`/crm/customers/${customer.id}/edit`}>რედაქტირება</Link>,
-            },
-          };
-        })}
-      />
+              status: status.label,
+              statusTone: status.tone,
+              lat: customer.latitude == null ? null : Number(customer.latitude),
+              lng: customer.longitude == null ? null : Number(customer.longitude),
+            };
+          })}
+        />
+      )}
     </section>
   );
 }

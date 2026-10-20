@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export type ComboOption = { value: string; label: string };
 
@@ -13,18 +15,25 @@ export function ComboBox({
   name,
   options,
   defaultValue = "",
+  value: controlled,
+  onValueChange,
   required = false,
   placeholder = "ძებნა",
+  label,
 }: {
-  name: string;
+  name?: string;
   options: ComboOption[];
   defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
   required?: boolean;
   placeholder?: string;
+  label?: string;
 }) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
-  const [value, setValue] = useState(() => initialValue(options, defaultValue));
+  const [uncontrolled, setUncontrolled] = useState(() => initialValue(options, defaultValue));
+  const value = controlled ?? uncontrolled;
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -44,7 +53,8 @@ export function ComboBox({
   }, []);
 
   function choose(option: ComboOption) {
-    setValue(option.value);
+    if (controlled === undefined) setUncontrolled(option.value);
+    onValueChange?.(option.value);
     setQuery("");
     setOpen(false);
   }
@@ -69,14 +79,14 @@ export function ComboBox({
   }
 
   return (
-    <div className="combo" ref={rootRef}>
-      <input type="hidden" name={name} value={value} required={required} />
-      <input
-        className="combo-input"
+    <div className="relative" ref={rootRef}>
+      {name ? <input type="hidden" name={name} value={value} required={required} /> : null}
+      <Input
         role="combobox"
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-label={label}
         placeholder={selected?.label || placeholder}
         value={open ? query : selected?.label ?? ""}
         onChange={(event) => {
@@ -92,14 +102,23 @@ export function ComboBox({
         onKeyDown={onKeyDown}
       />
       {open ? (
-        <ul className="combo-list" id={listId} role="listbox">
-          {visible.length === 0 ? <li className="combo-empty">ვერ მოიძებნა</li> : visible.map((option, index) => (
+        <ul
+          className="absolute inset-x-0 z-30 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-sm dark:border-gray-800 dark:bg-gray-dark"
+          id={listId}
+          role="listbox"
+        >
+          {visible.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">ვერ მოიძებნა</li>
+          ) : visible.map((option, index) => (
             <li key={`${option.value}-${option.label}`} role="presentation">
               <button
                 type="button"
                 role="option"
                 aria-selected={option.value === value}
-                className={index === active ? "active" : undefined}
+                className={cn(
+                  "flex min-h-8 w-full items-center justify-start rounded-md bg-transparent px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.03]",
+                  index === active && "bg-gray-100 text-brand-500 dark:bg-white/[0.03] dark:text-brand-400",
+                )}
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActive(index)}
                 onClick={() => choose(option)}

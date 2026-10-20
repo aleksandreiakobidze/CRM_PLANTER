@@ -4,18 +4,25 @@ import Link from "next/link";
 import { useEffect, useState, type ComponentType } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart,
   Bus,
   CalendarDays,
   ClipboardList,
   FileText,
   Home,
+  Leaf,
   LogOut,
+  Megaphone,
   Menu,
   Package,
   PanelLeft,
+  PartyPopper,
   Receipt,
   Repeat,
   Settings,
+  ShoppingCart,
+  Trees,
+  Truck,
   Upload,
   Users,
   Warehouse,
@@ -23,6 +30,7 @@ import {
   X,
 } from "@/components/icons";
 import { logoutAction } from "@/server/actions/auth-actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const ICONS: Record<string, ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
   "/": Home,
@@ -30,10 +38,18 @@ const ICONS: Record<string, ComponentType<{ className?: string; "aria-hidden"?: 
   "/calendar": CalendarDays,
   "/crm/customers": Users,
   "/sales/quotes": FileText,
+  "/sales/orders": ClipboardList,
   "/finance/invoices": Receipt,
   "/products": Package,
   "/inventory": Warehouse,
   "/rental": Repeat,
+  "/greenhouse": Leaf,
+  "/purchases": ShoppingCart,
+  "/projects": Trees,
+  "/delivery": Truck,
+  "/reports": BarChart,
+  "/marketing": Megaphone,
+  "/events": PartyPopper,
   "/maintenance": Wrench,
   "/excursions": Bus,
   "/import": Upload,
@@ -54,6 +70,7 @@ const GROUPS: { title: string; links: [string, string][] }[] = [
     links: [
       ["/crm/customers", "კლიენტები"],
       ["/sales/quotes", "შეთავაზებები"],
+      ["/sales/orders", "შეკვეთები"],
       ["/finance/invoices", "ინვოისები"],
     ],
   },
@@ -62,21 +79,26 @@ const GROUPS: { title: string; links: [string, string][] }[] = [
     links: [
       ["/products", "პროდუქტები"],
       ["/inventory", "მარაგი"],
+      ["/greenhouse", "სათბური"],
+      ["/purchases", "შესყიდვები"],
       ["/rental", "გაქირავება"],
     ],
   },
   {
     title: "სერვისი",
     links: [
+      ["/projects", "გამწვანება"],
+      ["/delivery", "მიწოდება"],
       ["/maintenance", "მოვლა"],
       ["/excursions", "ექსკურსიები"],
+      ["/events", "ღონისძიებები"],
+      ["/marketing", "მარკეტინგი"],
+      ["/reports", "რეპორტები"],
       ["/import", "იმპორტი"],
       ["/settings", "პარამეტრები"],
     ],
   },
 ];
-
-const LATER = ["სათბური · ეტაპი 3", "შესყიდვები · ეტაპი 3", "მიწოდება · ეტაპი 3", "მარკეტინგი · ეტაპი 4"];
 
 const GO: Record<string, string> = {
   h: "/",
@@ -178,14 +200,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ))}
             </details>
           ))}
-          {compact ? null : (
-            <details className="nav-group">
-              <summary>შემდეგი ეტაპები</summary>
-              {LATER.map((label) => (
-                <span key={label} className="muted-nav">{label}</span>
-              ))}
-            </details>
-          )}
         </nav>
         <form action={logoutAction}>
           <button className="secondary" type="submit" title="გასვლა" aria-label="გასვლა">
@@ -210,6 +224,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <input name="q" type="search" placeholder="კლიენტი, ტელეფონი, SKU ან ინვოისი" aria-label="ძებნა" enterKeyHint="search" />
             <button type="submit">ძებნა</button>
           </form>
+          <ThemeToggle />
         </header>
         <main className="main" id="main">{children}</main>
       </div>

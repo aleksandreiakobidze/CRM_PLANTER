@@ -2,9 +2,9 @@ import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
 import { getDb, type Tx } from "@/server/db";
 import { BusinessError, isUniqueViolation } from "@/server/errors";
-import { D, Decimal, moneyText, roundMoney } from "@/server/money";
+import { D, Decimal, moneyPrint, moneyText, priceFromTarget, roundMoney } from "@/server/money";
 import { nextNumber } from "@/server/numbers";
-import { formatDateOnly, tbilisiDateString } from "@/server/time";
+import { formatDateOnly, formatGeorgianLongDate, formatGeorgianShortDate, tbilisiDateString } from "@/server/time";
 import { withTx } from "@/server/tx";
 
 export type InvoiceSnapshot = {
@@ -15,12 +15,14 @@ export type InvoiceSnapshot = {
     address: string | null;
     bankName: string | null;
     iban: string | null;
+    directorName?: string | null;
   };
   buyer: {
     name: string;
     legalName: string | null;
     identificationCode: string | null;
     address: string | null;
+    directorName?: string | null;
   };
   currency: string;
   lines: {
@@ -67,7 +69,9 @@ async function createInvoiceFromOrderTx(tx: Tx, actor: Actor, orderId: string, p
     include: { lines: true, customer: { include: { addresses: true } } },
   });
   if (!order) throw new BusinessError("შეკვეთა ვერ მოიძებნა", "not_found");
-  if (order.status !== "fulfilled") throw new BusinessError("ინვოისი იქმნება მიწოდებული შეკვეთიდან", "invalid_state");
+  if (!["completed", "rs_error", "fulfilled"].includes(order.status)) {
+    throw new BusinessError("ინვოისი იქმნება მიწოდებული შეკვეთიდან", "invalid_state");
+  }
   return insertInvoice(tx, actor, {
     postingKey,
     customerId: order.customerId,
@@ -85,6 +89,113 @@ async function createInvoiceFromOrderTx(tx: Tx, actor: Actor, orderId: string, p
     })),
     buyerAddress: order.customer.addresses[0]?.line1 ?? null,
   });
+}
+
+export async function createInvoiceFromRental(actor: Actor, bookingId: string) {
+  requirePermission(actor, "finance.write");
+  const postingKey = `invoice:rental:${bookingId}`;
+  try {
+    return await withTx((tx) => createInvoiceFromRentalTx(tx, actor, bookingId, postingKey));
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const existing = await getDb().invoice.findUnique({ where: { postingKey } });
+    if (!existing || existing.organizationId !== actor.organizationId) throw error;
+    return existing;
+  }
+}
+
+async function createInvoiceFromRentalTx(tx: Tx, actor: Actor, bookingId: string, postingKey: string) {
+  const existing = await tx.invoice.findUnique({ where: { postingKey } });
+  if (existing) return existing;
+  const booking = await tx.rentalBooking.findFirst({
+    where: { id: bookingId, organizationId: actor.organizationId },
+    include: { lines: true, customer: { include: { addresses: true } } },
+  });
+  if (!booking) throw new BusinessError("ჯავშანი ვერ მოიძებნა", "not_found");
+  const quantity = D(booking.lines.length);
+  if (quantity.lte(0)) throw new BusinessError("ჯავშანზე მცენარე არ არის", "invalid_state");
+  const priced = priceFromTarget(quantity, D(booking.total));
+  return createManualInvoice(tx, actor, {
+    postingKey,
+    customerId: booking.customerId,
+    sourceType: "rental",
+    sourceId: booking.id,
+    lines: [
+      {
+        description: "მცენარის გაქირავება",
+        quantity,
+        unitPrice: priced.unitPrice,
+        lineTotal: priced.lineTotal,
+      },
+    ],
+    adjustment: priced.adjustment,
+    buyerAddress: booking.customer.addresses[0]?.line1 ?? null,
+  });
+}
+
+export async function issueCreditNote(
+  actor: Actor,
+  input: { customerId: string; amount: string; description: string; postingKey: string },
+) {
+  requirePermission(actor, "finance.write");
+  const amount = roundMoney(D(input.amount));
+  if (amount.lte(0)) throw new BusinessError("კრედიტი ნულზე მეტი უნდა იყოს", "validation");
+  try {
+    return await withTx((tx) =>
+      createManualInvoice(tx, actor, {
+        postingKey: input.postingKey,
+        customerId: input.customerId,
+        sourceType: "credit_note",
+        sourceId: input.postingKey,
+        lines: [
+          {
+            description: input.description.trim() || "კრედიტი",
+            quantity: D("1"),
+            unitPrice: amount.neg(),
+            lineTotal: amount.neg(),
+          },
+        ],
+      }),
+    );
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const existing = await getDb().invoice.findUnique({ where: { postingKey: input.postingKey } });
+    if (!existing) throw error;
+    return existing;
+  }
+}
+
+export async function grantCustomerCredit(
+  actor: Actor,
+  input: { customerId: string; amount: string; reason: string; postingKey: string },
+) {
+  requirePermission(actor, "finance.write");
+  const amount = roundMoney(D(input.amount));
+  if (amount.lte(0)) throw new BusinessError("კრედიტი ნულზე მეტი უნდა იყოს", "validation");
+  try {
+    return await withTx(async (tx) => {
+      const existing = await tx.customerCredit.findUnique({ where: { postingKey: input.postingKey } });
+      if (existing) return existing;
+      const customer = await tx.customer.findFirst({
+        where: { id: input.customerId, organizationId: actor.organizationId },
+      });
+      if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
+      return tx.customerCredit.create({
+        data: {
+          organizationId: actor.organizationId,
+          customerId: customer.id,
+          amount: amount.toFixed(2),
+          postingKey: input.postingKey,
+          reason: input.reason.trim() || "კრედიტი",
+        },
+      });
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const existing = await getDb().customerCredit.findUnique({ where: { postingKey: input.postingKey } });
+    if (!existing) throw error;
+    return existing;
+  }
 }
 
 export async function createManualInvoice(
@@ -153,12 +264,14 @@ async function insertInvoice(
       address: organization.address,
       bankName: organization.bankName,
       iban: organization.iban,
+      directorName: organization.directorName,
     },
     buyer: {
       name: customer.name,
       legalName: customer.legalName,
       identificationCode: customer.identificationCode,
-      address: input.buyerAddress ?? customer.addresses[0]?.line1 ?? null,
+      address: composeBuyerAddress(input.buyerAddress ?? customer.addresses[0]?.line1 ?? null, customer.city),
+      directorName: customer.directorName,
     },
     currency: input.currency,
     lines: input.lines.map((line) => ({
@@ -226,13 +339,16 @@ export async function invoiceBalance(invoiceId: string): Promise<{ total: Decima
 }
 
 export function invoiceHtml(snapshot: InvoiceSnapshot, number: string): string {
+  const issuedLong = safeGeorgianLongDate(snapshot.issuedOn);
+  const issuedShort = safeGeorgianShortDate(snapshot.issuedOn);
+  const currencyLabel = snapshot.currency === "GEL" ? "ლარი (GEL)" : snapshot.currency;
+  const sellerName = snapshot.seller.legalName || snapshot.seller.name;
   const rows = snapshot.lines
     .map(
       (line) => `<tr>
         <td>${escapeHtml(line.description)}</td>
-        <td class="num">${escapeHtml(line.quantity)}</td>
-        <td class="num">${escapeHtml(line.unitPrice)}</td>
-        <td class="num">${escapeHtml(line.lineTotal)}</td>
+        <td class="num">${escapeHtml(quantityLabel(line.quantity))}</td>
+        <td class="num">${escapeHtml(moneyPrint(line.lineTotal))} ${escapeHtml(snapshot.currency)}</td>
       </tr>`,
     )
     .join("");
@@ -245,29 +361,67 @@ export function invoiceHtml(snapshot: InvoiceSnapshot, number: string): string {
       font-family: "Noto Sans Georgian";
       src: url("font.woff") format("woff");
     }
-    body { font-family: "Noto Sans Georgian", sans-serif; color: #14231b; margin: 32px; }
-    h1 { color: #14532d; font-size: 28px; margin-bottom: 4px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-    th, td { border-bottom: 1px solid #d9e2dc; padding: 8px; text-align: left; }
-    .num { text-align: right; }
-    .total { font-size: 18px; font-weight: 700; }
-    .note { margin-top: 24px; color: #3f5d4b; }
+    * { box-sizing: border-box; }
+    body { font-family: "Noto Sans Georgian", sans-serif; color: #1a2e24; margin: 28px 32px; background: #fff; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+    .logo { height: 56px; }
+    h1 { font-size: 34px; margin: 0 0 4px; font-weight: 700; }
+    .number { margin: 0 0 16px; color: #115e59; font-size: 15px; }
+    .date { margin: 0 0 24px; }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 20px; }
+    .party h2 { font-size: 13px; margin: 0 0 8px; color: #115e59; font-weight: 700; }
+    .party p { margin: 0 0 4px; font-size: 13px; }
+    .party-name { font-weight: 700; }
+    .currency { margin: 0 0 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #d6d3d1; vertical-align: top; }
+    th { border-bottom: 2px solid #1a2e24; font-size: 13px; }
+    .num { text-align: right; white-space: nowrap; }
+    .total-row td { border-bottom: none; font-weight: 700; padding-top: 16px; }
+    .sign { margin-top: 28px; font-size: 13px; }
+    .bank { margin-top: 28px; }
+    .bank h2 { font-size: 14px; margin: 0 0 8px; }
+    .bank p { margin: 0 0 4px; font-size: 13px; }
+    .note { margin-top: 32px; font-size: 11px; color: #57534e; }
   </style>
 </head>
 <body>
-  <h1>ინვოისი ${escapeHtml(number)}</h1>
-  <p>${escapeHtml(snapshot.seller.name)}</p>
-  <p>საიდენტიფიკაციო კოდი: ${escapeHtml(snapshot.seller.identificationCode ?? "—")}</p>
-  <p>ბანკი: ${escapeHtml(snapshot.seller.bankName ?? "—")} ${escapeHtml(snapshot.seller.iban ?? "")}</p>
-  <p>მყიდველი: ${escapeHtml(snapshot.buyer.name)}</p>
-  <p>მისამართი: ${escapeHtml(snapshot.buyer.address ?? "—")}</p>
-  <p>თარიღი: ${escapeHtml(snapshot.issuedOn)} · ვალუტა: ${escapeHtml(snapshot.currency)}</p>
+  <div class="header">
+    <div>
+      <h1>ინვოისი</h1>
+      <p class="number">${escapeHtml(number)}</p>
+    </div>
+    <img class="logo" src="logo.png" alt="Planter" />
+  </div>
+  <p class="date">თარიღი: ${escapeHtml(issuedLong)}</p>
+  <div class="parties">
+    ${partyHtml("მიმწოდებელი", snapshot.seller)}
+    ${partyHtml("მომსახურების მიმღები", snapshot.buyer)}
+  </div>
+  <p class="currency">ვალუტა: ${escapeHtml(currencyLabel)}</p>
   <table>
-    <thead><tr><th>დასახელება</th><th class="num">რაოდენობა</th><th class="num">ფასი</th><th class="num">ჯამი</th></tr></thead>
-    <tbody>${rows}</tbody>
+    <thead>
+      <tr>
+        <th>მომსახურების დასახელება</th>
+        <th class="num">რაოდენობა</th>
+        <th class="num">თანხა</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="2">სულ გადასახდელი</td>
+        <td class="num">${escapeHtml(moneyPrint(snapshot.total))} ${escapeHtml(snapshot.currency)}</td>
+      </tr>
+    </tbody>
   </table>
-  <p class="total">ჯამი: ${escapeHtml(snapshot.total)} ${escapeHtml(snapshot.currency)}</p>
-  <p>დამრგვალების კორექტირება: ${escapeHtml(snapshot.adjustment)}</p>
+  <p class="sign">${escapeHtml(sellerName)} ${escapeHtml(issuedShort)}</p>
+  <div class="bank">
+    <h2>საბანკო რეკვიზიტები</h2>
+    ${optionalLine("ბანკი", snapshot.seller.bankName)}
+    ${optionalLine("მიმღები", sellerName)}
+    ${optionalLine("ანგარიში", snapshot.seller.iban)}
+  </div>
   <p class="note">${escapeHtml(snapshot.fiscalNote)}</p>
 </body>
 </html>`;
@@ -293,23 +447,77 @@ async function htmlToPdf(html: string): Promise<Buffer> {
   const { readFile } = await import("fs/promises");
   const { join } = await import("path");
   let font = "";
+  let logo = "";
   try {
     const file = await readFile(join(process.cwd(), "public", "fonts", "noto-sans-georgian-400.woff"));
     font = file.toString("base64");
   } catch {
     font = "";
   }
-  const withFont = font
-    ? html.replace('url("font.woff")', `url("data:font/woff;base64,${font}")`)
-    : html;
+  try {
+    const file = await readFile(join(process.cwd(), "public", "brand", "planter-logo.png"));
+    logo = file.toString("base64");
+  } catch {
+    logo = "";
+  }
+  let withAssets = font ? html.replace('url("font.woff")', `url("data:font/woff;base64,${font}")`) : html;
+  withAssets = logo
+    ? withAssets.replace('src="logo.png"', `src="data:image/png;base64,${logo}"`)
+    : withAssets.replace('<img class="logo" src="logo.png" alt="Planter" />', "");
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    await page.setContent(withFont, { waitUntil: "load" });
+    await page.setContent(withAssets, { waitUntil: "load" });
     const pdf = await page.pdf({ format: "A4", printBackground: true });
     return Buffer.from(pdf);
   } finally {
     await browser.close();
+  }
+}
+
+function composeBuyerAddress(line1: string | null, city: string | null): string | null {
+  const parts = [line1, city].map((part) => part?.trim()).filter((part): part is string => Boolean(part));
+  return parts.length ? parts.join(", ") : null;
+}
+
+function quantityLabel(value: string): string {
+  const amount = D(value);
+  if (amount.equals(amount.trunc())) return amount.toFixed(0);
+  return amount.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function partyHtml(
+  title: string,
+  party: { name: string; legalName: string | null; identificationCode: string | null; address: string | null; directorName?: string | null },
+): string {
+  return `<div class="party">
+    <h2>${escapeHtml(title)}</h2>
+    <p class="party-name">${escapeHtml(party.legalName || party.name)}</p>
+    ${optionalLine("ს/კ", party.identificationCode)}
+    ${optionalLine("იურიდიული მისამართი", party.address)}
+    ${optionalLine("დირექტორი", party.directorName)}
+  </div>`;
+}
+
+function optionalLine(label: string, value: string | null | undefined): string {
+  const text = value?.trim();
+  if (!text) return "";
+  return `<p>${escapeHtml(label)}: ${escapeHtml(text)}</p>`;
+}
+
+function safeGeorgianLongDate(iso: string): string {
+  try {
+    return formatGeorgianLongDate(iso);
+  } catch {
+    return iso;
+  }
+}
+
+function safeGeorgianShortDate(iso: string): string {
+  try {
+    return formatGeorgianShortDate(iso);
+  } catch {
+    return iso;
   }
 }
 

@@ -4,7 +4,7 @@ import { getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { createVariant } from "@/server/features/catalog/catalog-service";
 import { addActivity, addAddress, addContact, createCustomer, createTask, setTaskStatus } from "@/server/features/crm/customer-service";
-import { bookExcursion, createProgram } from "@/server/features/excursions/excursion-service";
+import { bookExcursion } from "@/server/features/excursions/excursion-service";
 import { createInvoiceFromOrder } from "@/server/features/finance/invoice-service";
 import { recordPayment } from "@/server/features/finance/payment-service";
 import { postOpeningStock } from "@/server/features/inventory/stock-service";
@@ -210,7 +210,7 @@ async function main() {
   }
 
   const fulfilled = await db.salesOrder.findMany({
-    where: { organizationId: organization.id, status: "fulfilled", invoices: { none: {} } },
+    where: { organizationId: organization.id, status: { in: ["fulfilled", "completed", "rs_error"] }, invoices: { none: {} } },
     orderBy: { createdAt: "asc" },
   });
   let invoiceCount = await db.invoice.count({ where: { organizationId: organization.id } });
@@ -275,19 +275,6 @@ async function main() {
     await setContractStatus(actor, contract.id, "active");
   }
 
-  let programs = await db.excursionProgram.findMany({ where: { organizationId: organization.id }, orderBy: { nameKa: "asc" } });
-  for (let index = programs.length; index < TARGET; index += 1) {
-    await createProgram(actor, {
-      nameKa: PROGRAMS[index % PROGRAMS.length],
-      durationMinutes: 90,
-      pricePerChild: "25",
-      maxCapacity: 25,
-      variantId: variants[0].id,
-      qtyPerChild: "1",
-    });
-  }
-  programs = await db.excursionProgram.findMany({ where: { organizationId: organization.id }, orderBy: { nameKa: "asc" } });
-
   let resourceCount = await db.resource.count({ where: { organizationId: organization.id } });
   for (let index = resourceCount; index < TARGET; index += 1) {
     await db.resource.create({ data: { organizationId: organization.id, nameKa: `სათბური ${index + 1}`, capacity: 1 } });
@@ -298,11 +285,12 @@ async function main() {
     const day = addDaysIso("2026-11-03", index);
     await bookExcursion(actor, {
       customerId: customers[index % customers.length].id,
-      programId: programs[index % programs.length].id,
       resourceId: resources[index % resources.length].id,
       startsAt: zonedDateTime(day, "13:00"),
       endsAt: zonedDateTime(day, "16:00"),
       plannedChildren: 8,
+      note: PROGRAMS[index % PROGRAMS.length],
+      price: "80",
       postingKey: `demo-ex:${organization.id}:${index + 1}`,
     });
   }

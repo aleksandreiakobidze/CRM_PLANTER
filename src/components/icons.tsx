@@ -74,6 +74,9 @@ export function Menu(props: IconProps) {
 export function X(props: IconProps) {
   return glyph(props, "M18 6 6 18M6 6l12 12");
 }
+export function Pencil(props: IconProps) {
+  return glyph(props, "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z");
+}
 export function ChevronDown(props: IconProps) {
   return glyph(props, "m6 9 6 6 6-6");
 }
@@ -85,4 +88,25 @@ export function UserPlus(props: IconProps) {
 }
 export function FilePlus(props: IconProps) {
   return glyph(props, "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 11v6M9 14h6");
+}
+export function Leaf(props: IconProps) {
+  return glyph(props, "M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10zM2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12");
+}
+export function ShoppingCart(props: IconProps) {
+  return glyph(props, "M6 6h15l-1.5 9h-12zM6 6 5 3H2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM18 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z");
+}
+export function Truck(props: IconProps) {
+  return glyph(props, "M14 18V6H3v12h2M14 8h4l3 4v6h-2M7 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z");
+}
+export function BarChart(props: IconProps) {
+  return glyph(props, "M4 20h16M7 16V10M12 16V4M17 16v-6");
+}
+export function Megaphone(props: IconProps) {
+  return glyph(props, "M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM16 8.5a5 5 0 0 1 0 7");
+}
+export function Trees(props: IconProps) {
+  return glyph(props, "M10 21v-4M7 21h6M10 17 5 10h4L6 4h8l-3 6h4zM17 21v-3M15 21h4M17 18l-3-5h3l-2-5h6l-2 5h3z");
+}
+export function PartyPopper(props: IconProps) {
+  return glyph(props, "M5.8 11.3 2 22l10.7-3.8M4 3h.01M22 8h.01M15 2h.01M22 20h.01M22 2l-2.24.75a2.9 8.7 0 0 0-1.01 8.7L11 13.5");
 }

@@ -26,6 +26,7 @@ test("ქართული შესვლიდან ნაწილობრ
   await page.goto("/crm/customers/new");
   await page.getByLabel("სახელი").fill(customerName);
   await page.getByLabel("ტელეფონი").fill(phone);
+  await page.getByLabel("საიდენტიფიკაციო კოდი").fill("400000099");
   await page.getByRole("button", { name: "შენახვა" }).click();
   await expect(page.getByRole("heading", { name: customerName })).toBeVisible();
   await expect(page.getByText(`+995${phone}`)).toBeVisible();
@@ -51,7 +52,9 @@ test("ქართული შესვლიდან ნაწილობრ
 
   await page.goto("/sales/quotes/new");
   await chooseLabeledOption(page, "კლიენტი", customerName);
-  await chooseLabeledOption(page, "ვარიანტი", sku);
+  await page.getByRole("button", { name: "აითემის დამატება" }).click();
+  await page.getByLabel("აითემის ძებნა").fill(sku);
+  await page.getByRole("option", { name: sku }).click();
   await page.getByLabel("რაოდენობა").fill("2");
   await page.getByLabel("ერთეულის ფასი").fill("10");
   await page.getByRole("button", { name: "შენახვა" }).click();
@@ -60,9 +63,17 @@ test("ქართული შესვლიდან ნაწილობრ
   await page.getByRole("button", { name: "შეკვეთად გარდაქმნა" }).click();
   await expect(page.getByRole("heading", { name: /^SO-/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "დაჯავშნა" }).click();
-  await expect(page.getByRole("button", { name: "მიწოდების დადასტურება" })).toBeVisible();
-  await page.getByRole("button", { name: "მიწოდების დადასტურება" }).click();
+  await page.getByRole("button", { name: "ავტორიზება" }).click();
+  await page.getByRole("navigation", { name: "დოკუმენტის ტაბები" }).getByRole("link", { name: "მიწოდება" }).click();
+  await expect(page.getByRole("button", { name: "დასრულება" })).toBeVisible();
+  await page.getByLabel("მძღოლის პირადი ნომერი").fill("01001001001");
+  await page.getByLabel("მძღოლის სახელი").fill("სატესტო მძღოლი");
+  await page.getByLabel("მანქანის ნომერი").fill("AA000AA");
+  await page.getByLabel("დაწყების მისამართი").fill("თბილისი, საწყობი");
+  await page.getByLabel("დასრულების მისამართი").fill("თბილისი, ობიექტი");
+  await page.getByLabel("დაწყების თარიღი").fill("2026-10-20");
+  await page.getByRole("button", { name: "დასრულება" }).click();
+  await page.getByRole("navigation", { name: "დოკუმენტის ტაბები" }).getByRole("link", { name: "შეკვეთა" }).click();
   await expect(page.getByRole("button", { name: "ინვოისის შექმნა" })).toBeVisible();
   await page.getByRole("button", { name: "ინვოისის შექმნა" }).click();
   await expect(page.getByRole("heading", { name: /^INV-/ })).toBeVisible();

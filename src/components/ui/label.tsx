@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export function Label({ className, ...props }: ComponentProps<typeof LabelPrimitive>) {
   return (
     <LabelPrimitive
-      className={cn("grid gap-1.5 text-[13px] font-semibold text-[var(--color-muted-foreground)]", className)}
+      className={cn("mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400", className)}
       {...props}
     />
   );

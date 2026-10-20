@@ -54,9 +54,10 @@ export async function bookRental(
   input: {
     customerId: string;
     assetIds: string[];
+    lines?: { assetId: string; unitPrice: string }[];
     startOn: string;
     endOn: string;
-    priceModel: "fixed_total" | "daily";
+    priceModel: "fixed_total" | "daily" | "line";
     total?: string;
     dailyRate?: string;
     depositAmount?: string;
@@ -64,7 +65,10 @@ export async function bookRental(
   },
 ) {
   requirePermission(actor, "rental.write");
-  if (input.assetIds.length === 0) throw new BusinessError("ჯავშანს კონკრეტული მცენარე სჭირდება", "validation");
+  const assetIds = input.lines?.length ? input.lines.map((line) => line.assetId) : input.assetIds;
+  if (assetIds.length === 0) throw new BusinessError("ჯავშანს კონკრეტული მცენარე სჭირდება", "validation");
+  if (new Set(assetIds).size !== assetIds.length) throw new BusinessError("ერთი მცენარე ორჯერ არ იწერება", "validation");
+  input = { ...input, assetIds, priceModel: input.lines?.length ? "line" : input.priceModel };
   try {
     return await withTx((tx) => bookRentalTx(tx, actor, input));
   } catch (error) {
@@ -80,6 +84,9 @@ async function bookRentalTx(tx: Tx, actor: Actor, input: Parameters<typeof bookR
   const days = rentalBillingDays(input.startOn, input.endOn);
   const occupancy = rentalOccupancy(input.startOn, input.endOn, organization.rentalBufferHours);
   const priced = priceRental(input, days);
+  const lineTotal = input.lines?.length
+    ? input.lines.reduce((sum, line) => sum.plus(roundMoney(D(line.unitPrice))), D(0))
+    : priced.total;
   const number = await nextNumber(tx, actor.organizationId, "rental", "RB");
   const booking = await tx.rentalBooking.create({
     data: {
@@ -93,7 +100,7 @@ async function bookRentalTx(tx: Tx, actor: Actor, input: Parameters<typeof bookR
       occupancyStart: occupancy.occupancyStart,
       occupancyEnd: occupancy.occupancyEnd,
       priceModel: input.priceModel,
-      total: priced.total.toFixed(2),
+      total: lineTotal.toFixed(2),
       depositAmount: D(input.depositAmount ?? "0").toFixed(2),
       postingKey: input.postingKey,
     },
@@ -124,12 +131,16 @@ async function bookRentalTx(tx: Tx, actor: Actor, input: Parameters<typeof bookR
         postingKey: `${input.postingKey}:${assetId}`,
       },
     });
+    const own = input.lines?.find((line) => line.assetId === assetId);
+    const unitPrice = own ? D(own.unitPrice) : priced.unitPrice;
+    const lineTotal = own ? roundMoney(unitPrice) : priced.lineTotal;
+    if (unitPrice.lt(0)) throw new BusinessError("ფასი უარყოფითი ვერ იქნება", "validation");
     await tx.rentalBookingLine.create({
       data: {
         bookingId: booking.id,
         assetId,
-        unitPrice: priced.unitPrice.toFixed(4),
-        lineTotal: priced.lineTotal.toFixed(2),
+        unitPrice: unitPrice.toFixed(4),
+        lineTotal: lineTotal.toFixed(2),
       },
     });
     await tx.rentalAsset.update({ where: { id: assetId }, data: { status: "reserved" } });

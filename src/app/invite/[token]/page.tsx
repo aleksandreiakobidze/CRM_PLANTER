@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useParams } from "next/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { acceptInviteAction } from "@/server/actions/auth-actions";
 import { initialActionState } from "@/server/actions/state";
 
@@ -11,7 +12,10 @@ export default function InvitePage() {
   return (
     <main className="auth">
       <section className="auth-card card">
-        <img className="auth-logo" src="/brand/planter-logo.png" alt="Planter" />
+        <div className="row">
+          <img className="auth-logo" src="/brand/planter-logo.png" alt="Planter" />
+          <ThemeToggle />
+        </div>
         <h1>ანგარიშის გააქტიურება</h1>
         <p className="muted">პაროლი მინიმუმ 10 სიმბოლოა.</p>
         <form action={action} className="form">

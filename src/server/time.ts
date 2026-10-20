@@ -21,6 +21,33 @@ export function formatDateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+const GEORGIAN_MONTHS = [
+  "იანვარი",
+  "თებერვალი",
+  "მარტი",
+  "აპრილი",
+  "მაისი",
+  "ივნისი",
+  "ივლისი",
+  "აგვისტო",
+  "სექტემბერი",
+  "ოქტომბერი",
+  "ნოემბერი",
+  "დეკემბერი",
+];
+
+export function formatGeorgianLongDate(iso: string): string {
+  parseDateOnly(iso);
+  const [year, month, day] = iso.split("-");
+  return `${Number(day)} ${GEORGIAN_MONTHS[Number(month) - 1]} ${year}`;
+}
+
+export function formatGeorgianShortDate(iso: string): string {
+  parseDateOnly(iso);
+  const [year, month, day] = iso.split("-");
+  return `${day}.${month}.${year}`;
+}
+
 export function addDaysIso(iso: string, days: number): string {
   const date = parseDateOnly(iso);
   date.setUTCDate(date.getUTCDate() + days);

@@ -16,6 +16,51 @@ export type DraftLine = {
   description?: string;
 };
 
+const OPEN = new Set(["open", "draft"]);
+const AUTHORIZED = new Set(["authorized", "confirmed"]);
+export const STOCK_ISSUED = new Set(["completed", "rs_error", "fulfilled"]);
+
+export function parseDocumentLines(raw: string): DraftLine[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new BusinessError("ხაზები ვერ წაიკითხა", "validation");
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) throw new BusinessError("ერთი ხაზი მაინც სჭირდება", "validation");
+  return parsed.map((row) => {
+    const item = row as { itemId?: string; variantId?: string; quantity?: string; unitPrice?: string; discountAmount?: string };
+    const unitPrice = String(item.unitPrice ?? "").trim();
+    return {
+      variantId: String(item.itemId || item.variantId || ""),
+      quantity: String(item.quantity || "1"),
+      unitPrice: unitPrice || undefined,
+      discountAmount: String(item.discountAmount || "0"),
+    };
+  });
+}
+
+async function prepareLines(tx: Tx, organizationId: string, lines: DraftLine[]) {
+  const prepared = [];
+  for (const line of lines) {
+    const quantity = D(line.quantity);
+    if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
+    const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId } });
+    if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+    const unitPrice = line.unitPrice ? D(line.unitPrice) : await resolveUnitPrice(tx, organizationId, variant.id, quantity);
+    const discount = D(line.discountAmount ?? "0");
+    prepared.push({
+      variantId: variant.id,
+      description: line.description || variant.nameKa,
+      quantity: quantity.toFixed(3),
+      unitPrice: unitPrice.toFixed(4),
+      discountAmount: discount.toFixed(2),
+      lineTotal: lineAmount(quantity, unitPrice, discount).toFixed(2),
+    });
+  }
+  return prepared;
+}
+
 async function salesLocation(tx: Tx, organizationId: string) {
   return tx.location.findUniqueOrThrow({
     where: { organizationId_code: { organizationId, code: "sales" } },
@@ -45,23 +90,7 @@ export async function createQuote(actor: Actor, input: { customerId: string; not
     const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
     if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
     const number = await nextNumber(tx, actor.organizationId, "quote", "QT");
-    const prepared = [];
-    for (const line of input.lines) {
-      const quantity = D(line.quantity);
-      if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
-      const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId: actor.organizationId } });
-      if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
-      const unitPrice = line.unitPrice ? D(line.unitPrice) : await resolveUnitPrice(tx, actor.organizationId, variant.id, quantity);
-      const discount = D(line.discountAmount ?? "0");
-      prepared.push({
-        variantId: variant.id,
-        description: line.description || variant.nameKa,
-        quantity: quantity.toFixed(3),
-        unitPrice: unitPrice.toFixed(4),
-        discountAmount: discount.toFixed(2),
-        lineTotal: lineAmount(quantity, unitPrice, discount).toFixed(2),
-      });
-    }
+    const prepared = await prepareLines(tx, actor.organizationId, input.lines);
     const quote = await tx.quote.create({
       data: {
         organizationId: actor.organizationId,
@@ -126,6 +155,73 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
   return order;
 }
 
+export async function createSalesOrder(actor: Actor, input: { customerId: string; notes?: string; postingKey: string; lines: DraftLine[] }) {
+  requirePermission(actor, "sales.write");
+  if (input.lines.length === 0) throw new BusinessError("შეკვეთას ერთი ხაზი მაინც სჭირდება", "validation");
+  try {
+    return await withTx((tx) => createSalesOrderTx(tx, actor, input));
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const existing = await getDb().salesOrder.findUnique({ where: { postingKey: input.postingKey } });
+    if (!existing || existing.organizationId !== actor.organizationId) throw error;
+    return existing;
+  }
+}
+
+async function createSalesOrderTx(tx: Tx, actor: Actor, input: { customerId: string; notes?: string; postingKey: string; lines: DraftLine[] }) {
+  const existing = await tx.salesOrder.findUnique({ where: { postingKey: input.postingKey } });
+  if (existing) return existing;
+  const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
+  if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
+  const location = await salesLocation(tx, actor.organizationId);
+  const prepared = await prepareLines(tx, actor.organizationId, input.lines);
+  const number = await nextNumber(tx, actor.organizationId, "sales_order", "SO");
+  const order = await tx.salesOrder.create({
+    data: {
+      organizationId: actor.organizationId,
+      number,
+      customerId: customer.id,
+      status: "open",
+      notes: input.notes,
+      postingKey: input.postingKey,
+      lines: {
+        create: prepared.map((line) => ({ ...line, locationId: location.id })),
+      },
+    },
+    include: { lines: true },
+  });
+  await audit(tx, actor, "order.create", "sales_order", order.id, undefined, { number: order.number });
+  return order;
+}
+
+export async function updateOpenOrder(actor: Actor, orderId: string, input: { customerId: string; notes?: string; lines: DraftLine[] }) {
+  requirePermission(actor, "sales.write");
+  if (input.lines.length === 0) throw new BusinessError("შეკვეთას ერთი ხაზი მაინც სჭირდება", "validation");
+  return withTx(async (tx) => {
+    const order = await tx.salesOrder.findFirst({
+      where: { id: orderId, organizationId: actor.organizationId },
+      include: { fulfillments: true },
+    });
+    if (!order) throw new BusinessError("შეკვეთა ვერ მოიძებნა", "not_found");
+    if (!OPEN.has(order.status) || order.fulfillments.length > 0) throw new BusinessError("ხაზები იცვლება მხოლოდ ღია შეკვეთაზე", "invalid_state");
+    const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
+    if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
+    const location = await salesLocation(tx, actor.organizationId);
+    const prepared = await prepareLines(tx, actor.organizationId, input.lines);
+    await tx.salesOrderLine.deleteMany({ where: { orderId: order.id } });
+    await tx.salesOrder.update({
+      where: { id: order.id },
+      data: {
+        customerId: customer.id,
+        notes: input.notes,
+        version: { increment: 1 },
+        lines: { create: prepared.map((line) => ({ ...line, locationId: location.id })) },
+      },
+    });
+    return tx.salesOrder.findUniqueOrThrow({ where: { id: order.id }, include: { lines: true } });
+  });
+}
+
 export async function confirmOrder(actor: Actor, orderId: string) {
   requirePermission(actor, "sales.write");
   try {
@@ -144,8 +240,8 @@ async function confirmOrderTx(tx: Tx, actor: Actor, orderId: string) {
     include: { lines: true },
   });
   if (!order) throw new BusinessError("შეკვეთა ვერ მოიძებნა", "not_found");
-  if (order.status === "confirmed" || order.status === "fulfilled") return order;
-  if (order.status === "cancelled") throw new BusinessError("გაუქმებული შეკვეთა ვერ ჯავშნდება", "invalid_state");
+  if (AUTHORIZED.has(order.status) || STOCK_ISSUED.has(order.status)) return order;
+  if (!OPEN.has(order.status)) throw new BusinessError("გაუქმებული შეკვეთა ვერ ჯავშნდება", "invalid_state");
   const lines = [...order.lines].sort((a, b) => a.variantId.localeCompare(b.variantId) || a.locationId.localeCompare(b.locationId));
   for (const line of lines) {
     await reserveQuantity(tx, {
@@ -159,7 +255,7 @@ async function confirmOrderTx(tx: Tx, actor: Actor, orderId: string) {
       postingKey: `reserve:${order.id}:${line.id}`,
     });
   }
-  return tx.salesOrder.update({ where: { id: order.id }, data: { status: "confirmed", version: { increment: 1 } } });
+  return tx.salesOrder.update({ where: { id: order.id }, data: { status: "authorized", version: { increment: 1 } } });
 }
 
 export async function cancelOrder(actor: Actor, orderId: string) {
@@ -203,7 +299,7 @@ async function fulfillOrderTx(tx: Tx, actor: Actor, orderId: string, postingKey:
     include: { lines: true },
   });
   if (!order) throw new BusinessError("შეკვეთა ვერ მოიძებნა", "not_found");
-  if (order.status !== "confirmed") throw new BusinessError("მიწოდებამდე შეკვეთა დაჯავშნილი უნდა იყოს", "invalid_state");
+  if (!AUTHORIZED.has(order.status)) throw new BusinessError("მიწოდებამდე შეკვეთა ავტორიზებული უნდა იყოს", "invalid_state");
   const number = await nextNumber(tx, actor.organizationId, "fulfillment", "FF");
   const fulfillment = await tx.fulfillment.create({
     data: {
@@ -245,7 +341,7 @@ async function fulfillOrderTx(tx: Tx, actor: Actor, orderId: string, postingKey:
       data: { fulfilledQty: D(line.fulfilledQty).plus(remaining).toFixed(3) },
     });
   }
-  await tx.salesOrder.update({ where: { id: order.id }, data: { status: "fulfilled", version: { increment: 1 } } });
+  await tx.salesOrder.update({ where: { id: order.id }, data: { status: "rs_error", version: { increment: 1 } } });
   await audit(tx, actor, "order.fulfill", "fulfillment", fulfillment.id);
   return fulfillment;
 }

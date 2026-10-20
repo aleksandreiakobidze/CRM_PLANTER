@@ -119,7 +119,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         title: booking.number,
         lines: [
           booking.customer.name,
-          booking.program.nameKa,
+          booking.note.trim() || booking.program?.nameKa || "ექსკურსია",
           `${formatInTimeZone(booking.startsAt, BUSINESS_TIME_ZONE, "HH:mm")}–${formatInTimeZone(booking.endsAt, BUSINESS_TIME_ZONE, "HH:mm")}`,
           `ბავშვები: ${booking.plannedChildren}`,
           EXCURSION_STATUS[booking.status] ?? booking.status,

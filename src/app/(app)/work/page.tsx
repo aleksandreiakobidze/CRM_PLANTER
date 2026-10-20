@@ -31,15 +31,24 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
   const openCount = tasks.filter((task) => task.status === "open" || task.status === "doing").length;
   return (
     <section className="grid">
-      <div className="page-head">
-        <div className="row">
-          <h1>ჩემი სამუშაო</h1>
-          <div className="segment" role="group" aria-label="დავალებების არე">
-            <Link href="/work" aria-current={scope === "mine" ? "page" : undefined}>ჩემი</Link>
-            {canSeeAll ? <Link href="/work?scope=all" aria-current={scope === "all" ? "page" : undefined}>ყველა</Link> : null}
+      <div className="work-top">
+        <div className="page-head">
+          <div className="row">
+            <h1>ჩემი სამუშაო</h1>
+            <div className="segment" role="group" aria-label="დავალებების არე">
+              <Link href="/work" aria-current={scope === "mine" ? "page" : undefined}>ჩემი</Link>
+              {canSeeAll ? <Link href="/work?scope=all" aria-current={scope === "all" ? "page" : undefined}>ყველა</Link> : null}
+            </div>
           </div>
+          <p>{scope === "all" ? "ორგანიზაციის ყველა დავალება." : "მხოლოდ შენზე გაცემული დავალება."} ღია და მიმდინარე: {openCount}.</p>
         </div>
-        <p>{scope === "all" ? "ორგანიზაციის ყველა დავალება." : "მხოლოდ შენზე გაცემული დავალება."} ღია და მიმდინარე: {openCount}.</p>
+        {canWrite ? (
+          <TaskAssignForm
+            actorId={actor.userId}
+            customers={customers}
+            members={members.map((member) => ({ id: member.userId, name: member.user.name }))}
+          />
+        ) : null}
       </div>
       <Fold id="work-today" title="დღეს" hint={`${day.contacts.length} კონტაქტი · ${day.tasks.length} დავალება`}>
         <div className="split">
@@ -71,15 +80,6 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
           </div>
         </div>
       </Fold>
-      {canWrite ? (
-        <Fold id="work-new-task" title="ახალი დავალება" hint="აღწერა, ხალხი, ფაილი" defaultOpen={false}>
-          <TaskAssignForm
-            actorId={actor.userId}
-            customers={customers}
-            members={members.map((member) => ({ id: member.userId, name: member.user.name }))}
-          />
-        </Fold>
-      ) : null}
       <TaskBoard
         canMove={canWrite}
         tasks={tasks.map((task) => {

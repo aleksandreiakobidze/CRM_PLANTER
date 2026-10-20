@@ -1,16 +1,29 @@
 import type { Metadata } from "next";
+import { PwaRegister } from "@/components/pwa-register";
+import { ThemeProvider } from "@/context/theme-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Planter CRM",
   description: "Planter-ის გაყიდვები, მარაგი, გაქირავება და მოვლა",
   icons: { icon: "/brand/planter-icon.png" },
+  manifest: "/manifest.webmanifest",
 };
+
+const themeBoot = `try{if(localStorage.getItem("planter-theme")==="dark"){document.documentElement.classList.add("dark");document.documentElement.setAttribute("data-color-scheme","dark")}}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ka">
-      <body>{children}</body>
+    <html lang="ka" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
+      </head>
+      <body>
+        <ThemeProvider>
+          <PwaRegister />
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

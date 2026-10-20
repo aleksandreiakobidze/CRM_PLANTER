@@ -14,9 +14,14 @@ const SHORTCUTS = [
   { href: "/crm/customers", title: "კლიენტები", text: "სია, სტატუსი, ძებნა" },
   { href: "/crm/customers/new", title: "ახალი კლიენტი", text: "კომპანია ან პირი" },
   { href: "/sales/quotes/new", title: "შეთავაზება", text: "ფასი მარაგს არ ცვლის" },
+  { href: "/sales/orders/new", title: "შეკვეთა", text: "ჰედერი და ხაზები" },
   { href: "/finance/invoices", title: "ინვოისები", text: "დარიცხული და გადახდა" },
   { href: "/rental/new", title: "გაქირავება", text: "ახალი ჯავშანი" },
   { href: "/excursions/new", title: "ექსკურსია", text: "ჯგუფის ჩაწერა" },
+  { href: "/purchases", title: "შესყიდვები", text: "PO და მიღება" },
+  { href: "/greenhouse", title: "სათბური", text: "პარტია და გადარგვა" },
+  { href: "/delivery", title: "მიწოდება", text: "მარშრუტი და გაჩერება" },
+  { href: "/reports", title: "რეპორტები", text: "KPI და Excel" },
 ];
 
 export default async function HomePage() {
