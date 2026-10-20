@@ -1,0 +1,1679 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Organization {
+  id                       String   @id @default(cuid())
+  name                     String
+  legalName                String?  @map("legal_name")
+  identificationCode       String?  @map("identification_code")
+  address                  String?
+  directorName             String?  @map("director_name")
+  bankName                 String?  @map("bank_name")
+  iban                     String?
+  currency                 String   @default("GEL")
+  timezone                 String   @default("Asia/Tbilisi")
+  taxMode                  String   @default("unset") @map("tax_mode")
+  taxRate                  Decimal  @default(0) @map("tax_rate") @db.Decimal(8, 4)
+  isDemo                   Boolean  @default(false) @map("is_demo")
+  portalEnabled            Boolean  @default(false) @map("portal_enabled")
+  autoInvoiceAfterWaybill  Boolean  @default(false) @map("auto_invoice_after_waybill")
+  rentalBufferHours        Int      @default(4) @map("rental_buffer_hours")
+  excursionWindowStart     String   @default("13:00") @map("excursion_window_start")
+  excursionWindowEnd       String   @default("16:00") @map("excursion_window_end")
+  maintenanceDefaultPercent Decimal @default(10) @map("maintenance_default_percent") @db.Decimal(6, 2)
+  createdAt                DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  memberships       Membership[]
+  roles             Role[]
+  invitations       Invitation[]
+  customers         Customer[]
+  species           Species[]
+  products          Product[]
+  variants          ProductVariant[]
+  priceLists        PriceList[]
+  locations         Location[]
+  stockBalances     StockBalance[]
+  stockMovements    StockMovement[]
+  reservations      Reservation[]
+  quotes            Quote[]
+  orders            SalesOrder[]
+  fulfillments      Fulfillment[]
+  returns           SalesReturn[]
+  invoices          Invoice[]
+  payments          Payment[]
+  credits           CustomerCredit[]
+  deposits          DepositTransaction[]
+  expenses          Expense[]
+  sequences         DocumentSequence[]
+  importBatches     ImportBatch[]
+  outbox            OutboxEvent[]
+  jobs              Job[]
+  rentalAssets      RentalAsset[]
+  rentalBookings    RentalBooking[]
+  assetReservations AssetReservation[]
+  contracts         MaintenanceContract[]
+  programs          ExcursionProgram[]
+  excursionBookings ExcursionBooking[]
+  resources         Resource[]
+  connections       IntegrationConnection[]
+  auditLogs         AuditLog[]
+  savedViews        SavedView[]
+  activities        Activity[]
+  tasks             Task[]
+  taskAttachments   TaskAttachment[]
+  customerPlants     CustomerPlant[]
+  replacementCases   ReplacementCase[]
+  suppliers          Supplier[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
+  landedCosts        LandedCost[]
+  growthBatches      GrowthBatch[]
+  greenhouseTasks    GreenhouseTask[]
+  inventoryCounts    InventoryCount[]
+  greeningProjects   GreeningProject[]
+  deliveryTasks      DeliveryTask[]
+  routes             Route[]
+  campaigns          Campaign[]
+  eventBookings      EventBooking[]
+  bankImportBatches  BankImportBatch[]
+  portalAccounts     CustomerPortalAccount[]
+  internalShipments  InternalShipment[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String   @map("password_hash")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  memberships     Membership[]
+  sessions        Session[]
+  tasks           Task[]
+  createdTasks    Task[]           @relation("TaskCreator")
+  taskAssignments TaskAssignment[]
+  taskUploads     TaskAttachment[] @relation("TaskUploader")
+  invitations     Invitation[]     @relation("InvitationCreator")
+  deliveryTasks   DeliveryTask[]   @relation("DeliveryDriver")
+  routes          Route[]          @relation("RouteDriver")
+
+  @@map("users")
+}
+
+model Role {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  code           String
+  nameKa         String @map("name_ka")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  permissions  RolePermission[]
+  memberships  Membership[]
+  invitations  Invitation[]
+
+  @@unique([organizationId, code])
+  @@map("roles")
+}
+
+model Permission {
+  id   String @id @default(cuid())
+  code String @unique
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Membership {
+  id             String  @id @default(cuid())
+  organizationId String  @map("organization_id")
+  userId         String  @map("user_id")
+  roleId         String  @map("role_id")
+  active         Boolean @default(true)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, userId])
+  @@map("memberships")
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt DateTime? @map("revoked_at") @db.DateTime(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Invitation {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  email          String
+  roleId         String    @map("role_id")
+  tokenHash      String    @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.DateTime(3)
+  acceptedAt     DateTime? @map("accepted_at") @db.DateTime(3)
+  createdById    String?   @map("created_by_id")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@map("invitations")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  actorId        String?  @map("actor_id")
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  reason         String?
+  before         Json?
+  after          Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+model Customer {
+  id                 String    @id @default(cuid())
+  organizationId     String    @map("organization_id")
+  kind               String
+  name               String
+  legalName          String?   @map("legal_name")
+  directorName       String?   @map("director_name")
+  identificationCode String?   @map("identification_code")
+  segment            String    @default("other")
+  relationshipStatus String    @default("fresh") @map("relationship_status")
+  doNotContact       Boolean   @default(false) @map("do_not_contact")
+  region             String?
+  city               String?
+  district           String?
+  venueType          String?   @map("venue_type")
+  phone              String?
+  phoneNormalized    String?   @map("phone_normalized")
+  email              String?
+  website            String?
+  mapsUrl            String?   @map("maps_url")
+  latitude           Decimal?  @db.Decimal(9, 6)
+  longitude          Decimal?  @db.Decimal(9, 6)
+  source             String?
+  priority           String?
+  verification       String?
+  notes              String?
+  nextContactOn      DateTime? @map("next_contact_on") @db.Date
+  ownerId            String?   @map("owner_id")
+  mergedIntoId       String?   @map("merged_into_id")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  mergedInto   Customer?    @relation("CustomerMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedFrom   Customer[]   @relation("CustomerMerge")
+  contacts     Contact[]
+  addresses    Address[]
+  activities   Activity[]
+  tasks        Task[]
+  quotes       Quote[]
+  orders       SalesOrder[]
+  invoices     Invoice[]
+  payments     Payment[]
+  credits      CustomerCredit[]
+  bookings     RentalBooking[]
+  contracts        MaintenanceContract[]
+  excursions       ExcursionBooking[]
+  projects         GreeningProject[]
+  deliveryTasks    DeliveryTask[]
+  eventBookings    EventBooking[]
+  bankImportRows   BankImportRow[]
+  portalAccounts   CustomerPortalAccount[]
+
+  @@index([organizationId, relationshipStatus])
+  @@index([organizationId, phoneNormalized])
+  @@index([organizationId, identificationCode])
+  @@index([organizationId, district])
+  @@index([organizationId, venueType])
+  @@index([organizationId, priority])
+  @@map("customers")
+}
+
+model Contact {
+  id              String  @id @default(cuid())
+  organizationId  String  @map("organization_id")
+  customerId      String  @map("customer_id")
+  name            String
+  title           String?
+  phone           String?
+  phoneNormalized String? @map("phone_normalized")
+  email           String?
+  isPrimary       Boolean @default(false) @map("is_primary")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, phoneNormalized])
+  @@index([customerId])
+  @@map("contacts")
+}
+
+model Address {
+  id             String  @id @default(cuid())
+  organizationId String  @map("organization_id")
+  customerId     String  @map("customer_id")
+  label          String  @default("მთავარი")
+  line1          String  @map("line1")
+  city           String?
+  region         String?
+  district       String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@map("addresses")
+}
+
+model Activity {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  type           String
+  result         String?
+  body           String
+  actorId        String?  @map("actor_id")
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, customerId, occurredAt])
+  @@map("activities")
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  title          String
+  description    String?
+  dueOn          DateTime? @map("due_on") @db.Date
+  priority       String    @default("normal")
+  type           String    @default("follow_up")
+  status         String    @default("open")
+  assigneeId     String?   @map("assignee_id")
+  createdById    String?   @map("created_by_id")
+  customerId     String?   @map("customer_id")
+  relatedType    String?   @map("related_type")
+  relatedId      String?   @map("related_id")
+  result         String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  assignee     User?            @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
+  createdBy    User?            @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  customer     Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignments  TaskAssignment[]
+  attachments  TaskAttachment[]
+
+  @@index([organizationId, assigneeId, status])
+  @@index([organizationId, createdById])
+  @@map("tasks")
+}
+
+model TaskAssignment {
+  id          String    @id @default(cuid())
+  taskId      String    @map("task_id")
+  userId      String    @map("user_id")
+  status      String    @default("open")
+  completedAt DateTime? @map("completed_at") @db.DateTime(3)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, userId])
+  @@index([userId, status])
+  @@map("task_assignments")
+}
+
+model TaskAttachment {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  taskId         String   @map("task_id")
+  fileName       String   @map("file_name")
+  contentType    String   @map("content_type")
+  byteSize       Int      @map("byte_size")
+  storageKey     String   @unique @map("storage_key")
+  uploadedById   String   @map("uploaded_by_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  task         Task         @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  uploadedBy   User         @relation("TaskUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, taskId])
+  @@map("task_attachments")
+}
+
+model SavedView {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  userId         String @map("user_id")
+  page           String
+  name           String
+  queryString    String @map("query_string")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, userId, page])
+  @@map("saved_views")
+}
+
+model Species {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  nameKa         String   @map("name_ka")
+  nameLatin      String?  @map("name_latin")
+  aliases        Json
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  products     Product[]
+
+  @@unique([organizationId, nameKa])
+  @@map("species")
+}
+
+model Product {
+  id             String  @id @default(cuid())
+  organizationId String  @map("organization_id")
+  category       String
+  nameKa         String  @map("name_ka")
+  speciesId      String? @map("species_id")
+  active         Boolean @default(true)
+  light          String?
+  water          String?
+  humidity       String?
+  careNotes      String? @map("care_notes")
+  videoUrl       String? @map("video_url")
+  frostHardiness String? @map("frost_hardiness")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  species      Species?         @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  variants     ProductVariant[]
+
+  @@index([organizationId, category])
+  @@map("products")
+}
+
+model ProductVariant {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  productId       String   @map("product_id")
+  sku             String
+  nameKa          String   @map("name_ka")
+  heightCm        Decimal? @map("height_cm") @db.Decimal(10, 2)
+  potVolumeLiters Decimal? @map("pot_volume_liters") @db.Decimal(10, 3)
+  sellable        Boolean  @default(true)
+  rentable        Boolean  @default(false)
+  active          Boolean  @default(true)
+  listPrice       Decimal  @default(0) @map("list_price") @db.Decimal(18, 4)
+  unitCost        Decimal  @default(0) @map("unit_cost") @db.Decimal(18, 4)
+  averageCost     Decimal  @default(0) @map("average_cost") @db.Decimal(18, 4)
+  barcode         String?
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  balances     StockBalance[]
+  movements    StockMovement[]
+  reservations Reservation[]
+  prices       PriceListEntry[]
+  assets              RentalAsset[]
+  purchaseLines       PurchaseOrderLine[]
+  growthBatches       GrowthBatch[]
+  countLines          InventoryCountLine[]
+  landedAllocations   LandedCostAllocation[]
+  shipmentLines       InternalShipmentLine[]
+
+  @@unique([organizationId, sku])
+  @@map("product_variants")
+}
+
+model PriceList {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  code           String
+  nameKa         String @map("name_ka")
+  kind           String
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entries      PriceListEntry[]
+
+  @@unique([organizationId, code])
+  @@map("price_lists")
+}
+
+model PriceListEntry {
+  id          String    @id @default(cuid())
+  priceListId String    @map("price_list_id")
+  variantId   String    @map("variant_id")
+  unitPrice   Decimal   @map("unit_price") @db.Decimal(18, 4)
+  minQty      Decimal   @default(1) @map("min_qty") @db.Decimal(18, 3)
+  validFrom   DateTime? @map("valid_from") @db.Date
+  validTo     DateTime? @map("valid_to") @db.Date
+
+  priceList PriceList      @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([priceListId, variantId])
+  @@map("price_list_entries")
+}
+
+model Location {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  code           String
+  nameKa         String @map("name_ka")
+  kind           String
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  balances     StockBalance[]
+  assets       RentalAsset[]
+  receipts     GoodsReceipt[]
+  batches      GrowthBatch[]
+  counts       InventoryCount[]
+  shipmentsFrom InternalShipment[] @relation("ShipmentFrom")
+  shipmentsTo   InternalShipment[] @relation("ShipmentTo")
+
+  @@unique([organizationId, code])
+  @@map("locations")
+}
+
+model StockBalance {
+  id             String  @id @default(cuid())
+  organizationId String  @map("organization_id")
+  variantId      String  @map("variant_id")
+  locationId     String  @map("location_id")
+  onHand         Decimal @default(0) @map("on_hand") @db.Decimal(18, 3)
+  reserved       Decimal @default(0) @db.Decimal(18, 3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location     Location       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, variantId, locationId])
+  @@map("stock_balances")
+}
+
+model StockMovement {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  variantId      String   @map("variant_id")
+  locationId     String   @map("location_id")
+  quantity       Decimal  @db.Decimal(18, 3)
+  unitCost       Decimal  @map("unit_cost") @db.Decimal(18, 4)
+  movementType   String   @map("movement_type")
+  postingKey     String   @unique @map("posting_key")
+  sourceType     String   @map("source_type")
+  sourceId       String   @map("source_id")
+  reason         String?
+  actorId        String?  @map("actor_id")
+  occurredAt     DateTime @default(now()) @map("occurred_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, variantId, occurredAt])
+  @@map("stock_movements")
+}
+
+model Reservation {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  variantId      String    @map("variant_id")
+  locationId     String    @map("location_id")
+  quantity       Decimal   @db.Decimal(18, 3)
+  status         String
+  sourceType     String    @map("source_type")
+  sourceId       String    @map("source_id")
+  postingKey     String    @unique @map("posting_key")
+  expiresAt      DateTime? @map("expires_at") @db.DateTime(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([sourceType, sourceId])
+  @@map("reservations")
+}
+
+model Quote {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  number         String
+  customerId     String    @map("customer_id")
+  status         String    @default("draft")
+  validUntil     DateTime? @map("valid_until") @db.Date
+  currency       String    @default("GEL")
+  notes          String?
+  createdById    String?   @map("created_by_id")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines        QuoteLine[]
+  order        SalesOrder?
+
+  @@unique([organizationId, number])
+  @@map("quotes")
+}
+
+model QuoteLine {
+  id             String  @id @default(cuid())
+  quoteId        String  @map("quote_id")
+  variantId      String? @map("variant_id")
+  description    String
+  quantity       Decimal @db.Decimal(18, 3)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(18, 4)
+  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxAmount      Decimal @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(18, 2)
+  sort           Int     @default(0)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  @@index([quoteId])
+  @@map("quote_lines")
+}
+
+model SalesOrder {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  number         String
+  customerId     String   @map("customer_id")
+  quoteId        String?  @unique @map("quote_id")
+  status         String   @default("open")
+  postingKey     String   @unique @map("posting_key")
+  currency       String   @default("GEL")
+  notes          String?
+  version        Int      @default(0)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  quote        Quote?           @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  lines        SalesOrderLine[]
+  fulfillments Fulfillment[]
+  invoices     Invoice[]
+  returns      SalesReturn[]
+
+  @@unique([organizationId, number])
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id             String  @id @default(cuid())
+  orderId        String  @map("order_id")
+  variantId      String  @map("variant_id")
+  locationId     String  @map("location_id")
+  description    String
+  quantity       Decimal @db.Decimal(18, 3)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(18, 4)
+  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(18, 2)
+  fulfilledQty   Decimal @default(0) @map("fulfilled_qty") @db.Decimal(18, 3)
+  returnedQty    Decimal @default(0) @map("returned_qty") @db.Decimal(18, 3)
+
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("sales_order_lines")
+}
+
+model Fulfillment {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  orderId        String   @map("order_id")
+  number         String
+  status         String   @default("posted")
+  postingKey       String    @unique @map("posting_key")
+  actorId          String?   @map("actor_id")
+  fulfilledAt      DateTime  @map("fulfilled_at") @db.DateTime(3)
+  waybillType      Int       @default(2) @map("waybill_type")
+  driverTin        String    @default("") @map("driver_tin")
+  driverName       String    @default("") @map("driver_name")
+  carNumber        String    @default("") @map("car_number")
+  transportText    String    @default("") @map("transport_text")
+  startAddress     String    @default("") @map("start_address")
+  endAddress       String    @default("") @map("end_address")
+  beginOn          DateTime? @map("begin_on") @db.Date
+  rsWaybillId      String?   @map("rs_waybill_id")
+  rsWaybillNumber  String?   @map("rs_waybill_number")
+  rsError          String?   @map("rs_error")
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  order        SalesOrder        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines        FulfillmentLine[]
+
+  @@unique([organizationId, number])
+  @@map("fulfillments")
+}
+
+model FulfillmentLine {
+  id            String  @id @default(cuid())
+  fulfillmentId String  @map("fulfillment_id")
+  orderLineId   String  @map("order_line_id")
+  variantId     String  @map("variant_id")
+  locationId    String  @map("location_id")
+  quantity      Decimal @db.Decimal(18, 3)
+  unitCost      Decimal @map("unit_cost") @db.Decimal(18, 4)
+
+  fulfillment Fulfillment @relation(fields: [fulfillmentId], references: [id], onDelete: Restrict)
+
+  @@map("fulfillment_lines")
+}
+
+model InternalShipment {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  number          String
+  status          String    @default("open")
+  fromLocationId  String    @map("from_location_id")
+  toLocationId    String    @map("to_location_id")
+  driverTin       String    @default("") @map("driver_tin")
+  driverName      String    @default("") @map("driver_name")
+  carNumber       String    @default("") @map("car_number")
+  transportText   String    @default("") @map("transport_text")
+  startAddress    String    @default("") @map("start_address")
+  endAddress      String    @default("") @map("end_address")
+  beginOn         DateTime? @map("begin_on") @db.Date
+  rsWaybillId     String?   @map("rs_waybill_id")
+  rsWaybillNumber String?   @map("rs_waybill_number")
+  rsError         String?   @map("rs_error")
+  postingKey      String    @unique @map("posting_key")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  fromLocation Location               @relation("ShipmentFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  toLocation   Location               @relation("ShipmentTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  lines        InternalShipmentLine[]
+
+  @@unique([organizationId, number])
+  @@map("internal_shipments")
+}
+
+model InternalShipmentLine {
+  id          String  @id @default(cuid())
+  shipmentId  String  @map("shipment_id")
+  variantId   String  @map("variant_id")
+  description String
+  quantity    Decimal @db.Decimal(18, 3)
+  unitPrice   Decimal @default(0) @map("unit_price") @db.Decimal(18, 4)
+
+  shipment InternalShipment @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  variant  ProductVariant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([shipmentId])
+  @@map("internal_shipment_lines")
+}
+
+model SalesReturn {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  orderId        String   @map("order_id")
+  number         String
+  postingKey     String   @unique @map("posting_key")
+  reason         String
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  order        SalesOrder        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines        SalesReturnLine[]
+
+  @@map("sales_returns")
+}
+
+model SalesReturnLine {
+  id           String  @id @default(cuid())
+  returnId     String  @map("return_id")
+  orderLineId  String  @map("order_line_id")
+  quantity     Decimal @db.Decimal(18, 3)
+  condition    String
+  locationId   String  @map("location_id")
+
+  salesReturn SalesReturn @relation(fields: [returnId], references: [id], onDelete: Restrict)
+
+  @@map("sales_return_lines")
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  number         String?
+  customerId     String    @map("customer_id")
+  orderId        String?   @map("order_id")
+  status         String    @default("draft")
+  currency       String    @default("GEL")
+  subtotal       Decimal   @default(0) @db.Decimal(18, 2)
+  taxTotal       Decimal   @default(0) @map("tax_total") @db.Decimal(18, 2)
+  total          Decimal   @default(0) @db.Decimal(18, 2)
+  issuedOn       DateTime? @map("issued_on") @db.Date
+  dueOn          DateTime? @map("due_on") @db.Date
+  postingKey     String    @unique @map("posting_key")
+  snapshot       Json?
+  sourceType     String    @map("source_type")
+  sourceId       String    @map("source_id")
+  draftReason    String?   @map("draft_reason")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order        SalesOrder?   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  lines        InvoiceLine[]
+  allocations  PaymentAllocation[]
+
+  @@index([organizationId, status, issuedOn])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id             String  @id @default(cuid())
+  invoiceId      String  @map("invoice_id")
+  variantId      String? @map("variant_id")
+  description    String
+  quantity       Decimal @db.Decimal(18, 3)
+  unitPrice      Decimal @map("unit_price") @db.Decimal(18, 4)
+  discountAmount Decimal @default(0) @map("discount_amount") @db.Decimal(18, 2)
+  taxAmount      Decimal @default(0) @map("tax_amount") @db.Decimal(18, 2)
+  lineTotal      Decimal @map("line_total") @db.Decimal(18, 2)
+  sort           Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  kind           String   @default("payment")
+  amount         Decimal  @db.Decimal(18, 2)
+  method         String
+  paidOn         DateTime @map("paid_on") @db.Date
+  reference      String?
+  postingKey     String   @unique @map("posting_key")
+  refundOfId     String?  @map("refund_of_id")
+  actorId        String?  @map("actor_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  refundOf     Payment?            @relation("PaymentRefund", fields: [refundOfId], references: [id], onDelete: Restrict)
+  refunds      Payment[]           @relation("PaymentRefund")
+  allocations  PaymentAllocation[]
+
+  @@index([organizationId, paidOn])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id         String  @id @default(cuid())
+  paymentId  String  @map("payment_id")
+  invoiceId  String  @map("invoice_id")
+  amount     Decimal @db.Decimal(18, 2)
+  postingKey String  @unique @map("posting_key")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, invoiceId])
+  @@map("payment_allocations")
+}
+
+model CustomerCredit {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  amount         Decimal  @db.Decimal(18, 2)
+  postingKey     String   @unique @map("posting_key")
+  reason         String
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@map("customer_credits")
+}
+
+model DepositTransaction {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  bookingId      String?  @map("booking_id")
+  kind           String
+  amount         Decimal  @db.Decimal(18, 2)
+  postingKey     String   @unique @map("posting_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  booking      RentalBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@map("deposit_transactions")
+}
+
+model Expense {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  category       String
+  amount         Decimal  @db.Decimal(18, 2)
+  sourceType     String   @map("source_type")
+  sourceId       String   @map("source_id")
+  postingKey     String   @unique @map("posting_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@map("expenses")
+}
+
+model DocumentSequence {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  docType        String @map("doc_type")
+  year           Int
+  lastNumber     Int    @default(0) @map("last_number")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, docType, year])
+  @@map("document_sequences")
+}
+
+model ImportBatch {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  kind           String
+  status         String
+  fileHash       String   @map("file_hash")
+  actorId        String?  @map("actor_id")
+  summary        Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  rows         ImportRow[]
+
+  @@index([organizationId, kind, fileHash])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id        String  @id @default(cuid())
+  batchId   String  @map("batch_id")
+  rowNumber Int     @map("row_number")
+  rowKey    String  @map("row_key")
+  status    String
+  message   String?
+  entityId  String? @map("entity_id")
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, rowKey])
+  @@map("import_rows")
+}
+
+model OutboxEvent {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  type           String
+  payload        Json
+  status         String    @default("queued")
+  attempts       Int       @default(0)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.DateTime(3)
+  lockedUntil    DateTime? @map("locked_until") @db.DateTime(3)
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([status, availableAt])
+  @@map("outbox_events")
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  organizationId String? @map("organization_id")
+  type        String
+  payload     Json
+  status      String    @default("queued")
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now()) @map("available_at") @db.DateTime(3)
+  lockedUntil DateTime? @map("locked_until") @db.DateTime(3)
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([status, availableAt])
+  @@map("jobs")
+}
+
+model RentalAsset {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  code           String
+  variantId      String @map("variant_id")
+  locationId     String @map("location_id")
+  status         String @default("available")
+  unitCost       Decimal @map("unit_cost") @db.Decimal(18, 4)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  variant      ProductVariant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location     Location             @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  reservations AssetReservation[]
+  lines        RentalBookingLine[]
+
+  @@unique([organizationId, code])
+  @@map("rental_assets")
+}
+
+model RentalBooking {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  number         String
+  customerId     String   @map("customer_id")
+  status         String   @default("draft")
+  startOn        DateTime @map("start_on") @db.Date
+  endOn          DateTime @map("end_on") @db.Date
+  billingDays    Int      @map("billing_days")
+  occupancyStart DateTime @map("occupancy_start") @db.DateTime(3)
+  occupancyEnd   DateTime @map("occupancy_end") @db.DateTime(3)
+  priceModel     String   @map("price_model")
+  total          Decimal  @db.Decimal(18, 2)
+  depositAmount  Decimal  @default(0) @map("deposit_amount") @db.Decimal(18, 2)
+  currency       String   @default("GEL")
+  postingKey     String   @unique @map("posting_key")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines        RentalBookingLine[]
+  reservations AssetReservation[]
+  deposits     DepositTransaction[]
+
+  @@unique([organizationId, number])
+  @@map("rental_bookings")
+}
+
+model RentalBookingLine {
+  id        String  @id @default(cuid())
+  bookingId String  @map("booking_id")
+  assetId   String  @map("asset_id")
+  unitPrice Decimal @map("unit_price") @db.Decimal(18, 4)
+  lineTotal Decimal @map("line_total") @db.Decimal(18, 2)
+
+  booking RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  asset   RentalAsset   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@map("rental_booking_lines")
+}
+
+model AssetReservation {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  assetId        String   @map("asset_id")
+  bookingId      String   @map("booking_id")
+  status         String
+  occupancyStart DateTime @map("occupancy_start") @db.DateTime(3)
+  occupancyEnd   DateTime @map("occupancy_end") @db.DateTime(3)
+  postingKey     String   @unique @map("posting_key")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  asset        RentalAsset   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  booking      RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([assetId, status])
+  @@map("asset_reservations")
+}
+
+model MaintenanceContract {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  customerId     String    @map("customer_id")
+  number         String
+  status         String    @default("draft")
+  percent        Decimal   @db.Decimal(6, 2)
+  partialMonthPolicy String @default("full") @map("partial_month_policy")
+  startOn        DateTime  @map("start_on") @db.Date
+  endOn          DateTime? @map("end_on") @db.Date
+  version        Int       @default(0)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines        ContractPlantLine[]
+  amendments   ContractAmendment[]
+  plants       CustomerPlant[]
+
+  @@unique([organizationId, number])
+  @@map("maintenance_contracts")
+}
+
+model ContractPlantLine {
+  id                   String  @id @default(cuid())
+  contractId           String  @map("contract_id")
+  description          String
+  quantity             Decimal @db.Decimal(18, 3)
+  referenceUnitPrice   Decimal @map("reference_unit_price") @db.Decimal(18, 4)
+  active               Boolean @default(true)
+  replacesLineId       String? @map("replaces_line_id")
+
+  contract     MaintenanceContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  replacesLine ContractPlantLine?  @relation("PlantReplace", fields: [replacesLineId], references: [id], onDelete: Restrict)
+  replacedBy   ContractPlantLine[] @relation("PlantReplace")
+
+  @@index([contractId, active])
+  @@map("contract_plant_lines")
+}
+
+model ContractAmendment {
+  id          String   @id @default(cuid())
+  contractId  String   @map("contract_id")
+  effectiveOn DateTime @map("effective_on") @db.Date
+  percent     Decimal? @db.Decimal(6, 2)
+  note        String
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  contract MaintenanceContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+
+  @@index([contractId, effectiveOn])
+  @@map("contract_amendments")
+}
+
+model CustomerPlant {
+  id                 String  @id @default(cuid())
+  organizationId     String  @map("organization_id")
+  contractId         String? @map("contract_id")
+  contractLineId     String? @map("contract_line_id")
+  description        String
+  quantity           Decimal @db.Decimal(18, 3)
+  ownership          String
+  referenceUnitPrice Decimal @map("reference_unit_price") @db.Decimal(18, 4)
+  status             String  @default("active")
+  placeNote          String? @map("place_note")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  contract     MaintenanceContract? @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  replacements ReplacementCase[]
+
+  @@index([organizationId, status])
+  @@map("customer_plants")
+}
+
+model ReplacementCase {
+  id              String @id @default(cuid())
+  organizationId  String @map("organization_id")
+  customerPlantId String @map("customer_plant_id")
+  status          String
+  coverage        String
+  postingKey      String @unique @map("posting_key")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plant        CustomerPlant @relation(fields: [customerPlantId], references: [id], onDelete: Restrict)
+
+  @@map("replacement_cases")
+}
+
+model ExcursionProgram {
+  id              String  @id @default(cuid())
+  organizationId  String  @map("organization_id")
+  nameKa          String  @map("name_ka")
+  durationMinutes Int     @map("duration_minutes")
+  pricePerChild   Decimal @map("price_per_child") @db.Decimal(18, 2)
+  minBillable     Int     @default(1) @map("min_billable")
+  maxCapacity     Int     @map("max_capacity")
+  windowStart     String  @default("13:00") @map("window_start")
+  windowEnd       String  @default("16:00") @map("window_end")
+
+  organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  materials    ExcursionProgramMaterial[]
+  bookings     ExcursionBooking[]
+
+  @@map("excursion_programs")
+}
+
+model ExcursionProgramMaterial {
+  id        String  @id @default(cuid())
+  programId String  @map("program_id")
+  variantId String  @map("variant_id")
+  qtyPerChild Decimal @map("qty_per_child") @db.Decimal(18, 3)
+
+  program ExcursionProgram @relation(fields: [programId], references: [id], onDelete: Restrict)
+
+  @@map("excursion_program_materials")
+}
+
+model ExcursionBooking {
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  number            String
+  customerId        String   @map("customer_id")
+  programId         String?  @map("program_id")
+  resourceId        String   @map("resource_id")
+  status            String   @default("requested")
+  startsAt          DateTime @map("starts_at") @db.DateTime(3)
+  endsAt            DateTime @map("ends_at") @db.DateTime(3)
+  note              String   @default("")
+  price             Decimal  @default(0) @db.Decimal(18, 2)
+  plannedChildren   Int      @map("planned_children")
+  attendedChildren  Int?     @map("attended_children")
+  billableChildren  Int?     @map("billable_children")
+  billableBasis     String   @default("attended") @map("billable_basis")
+  windowException   Boolean  @default(false) @map("window_exception")
+  postingKey        String   @unique @map("posting_key")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  program      ExcursionProgram?     @relation(fields: [programId], references: [id], onDelete: Restrict)
+  resource     Resource              @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  staff        StaffAssignment[]
+  resourceHolds ResourceReservation[]
+  materials    MaterialUsage[]
+
+  @@unique([organizationId, number])
+  @@map("excursion_bookings")
+}
+
+model StaffAssignment {
+  id             String   @id @default(cuid())
+  bookingId      String?  @map("booking_id")
+  eventBookingId String?  @map("event_booking_id")
+  userId         String   @map("user_id")
+  roleCode       String   @map("role_code")
+  startsAt       DateTime @map("starts_at") @db.DateTime(3)
+  endsAt         DateTime @map("ends_at") @db.DateTime(3)
+
+  booking      ExcursionBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  eventBooking EventBooking?     @relation(fields: [eventBookingId], references: [id], onDelete: Restrict)
+
+  @@index([userId, startsAt, endsAt])
+  @@map("staff_assignments")
+}
+
+model Resource {
+  id             String @id @default(cuid())
+  organizationId String @map("organization_id")
+  nameKa         String @map("name_ka")
+  capacity       Int
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  bookings     ExcursionBooking[]
+  reservations ResourceReservation[]
+  events       EventBooking[]
+
+  @@map("resources")
+}
+
+model ResourceReservation {
+  id             String   @id @default(cuid())
+  resourceId     String   @map("resource_id")
+  bookingId      String?  @map("booking_id")
+  eventBookingId String?  @map("event_booking_id")
+  status         String
+  startsAt       DateTime @map("starts_at") @db.DateTime(3)
+  endsAt         DateTime @map("ends_at") @db.DateTime(3)
+
+  resource     Resource          @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  booking      ExcursionBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  eventBooking EventBooking?     @relation(fields: [eventBookingId], references: [id], onDelete: Restrict)
+
+  @@index([resourceId, status])
+  @@map("resource_reservations")
+}
+
+model MaterialUsage {
+  id        String  @id @default(cuid())
+  bookingId String  @map("booking_id")
+  variantId String  @map("variant_id")
+  reserved  Decimal @db.Decimal(18, 3)
+  consumed  Decimal @default(0) @db.Decimal(18, 3)
+
+  booking ExcursionBooking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@map("material_usages")
+}
+
+model IntegrationConnection {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  provider       String
+  status         String    @default("not_configured")
+  secretCipher   String?   @map("secret_cipher")
+  lastCheckedAt  DateTime? @map("last_checked_at") @db.DateTime(3)
+  lastError      String?   @map("last_error")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, provider])
+  @@map("integration_connections")
+}
+
+model Supplier {
+  id             String  @id @default(cuid())
+  organizationId String  @map("organization_id")
+  name           String
+  country        String  @default("GE")
+  currency       String  @default("GEL")
+  contact        String?
+  leadDays       Int     @default(0) @map("lead_days")
+  notes          String?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrders PurchaseOrder[]
+  growthBatches  GrowthBatch[]
+
+  @@index([organizationId, name])
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  supplierId     String    @map("supplier_id")
+  number         String
+  status         String    @default("draft")
+  currency       String    @default("GEL")
+  expectedOn     DateTime? @map("expected_on") @db.Date
+  notes          String?
+  postingKey     String    @unique @map("posting_key")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier     Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines        PurchaseOrderLine[]
+  receipts     GoodsReceipt[]
+  landedCosts  LandedCost[]
+
+  @@unique([organizationId, number])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String  @id @default(cuid())
+  purchaseOrderId String  @map("purchase_order_id")
+  variantId       String  @map("variant_id")
+  description     String
+  quantity        Decimal @db.Decimal(18, 3)
+  unitPrice       Decimal @map("unit_price") @db.Decimal(18, 4)
+  lineTotal       Decimal @map("line_total") @db.Decimal(18, 2)
+  receivedQty     Decimal @default(0) @map("received_qty") @db.Decimal(18, 3)
+  sort            Int     @default(0)
+
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  variant       ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  receiptLines  GoodsReceiptLine[]
+
+  @@index([purchaseOrderId])
+  @@map("purchase_order_lines")
+}
+
+model GoodsReceipt {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  purchaseOrderId String  @map("purchase_order_id")
+  locationId     String   @map("location_id")
+  number         String
+  postingKey     String   @unique @map("posting_key")
+  receivedOn     DateTime @map("received_on") @db.Date
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  location      Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines         GoodsReceiptLine[]
+
+  @@unique([organizationId, number])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id            String  @id @default(cuid())
+  receiptId     String  @map("receipt_id")
+  purchaseLineId String @map("purchase_line_id")
+  quantity      Decimal @db.Decimal(18, 3)
+  unitCost      Decimal @map("unit_cost") @db.Decimal(18, 4)
+  returnedQty   Decimal @default(0) @map("returned_qty") @db.Decimal(18, 3)
+
+  receipt      GoodsReceipt      @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  purchaseLine PurchaseOrderLine @relation(fields: [purchaseLineId], references: [id], onDelete: Restrict)
+
+  @@index([receiptId])
+  @@map("goods_receipt_lines")
+}
+
+model LandedCost {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  purchaseOrderId String   @map("purchase_order_id")
+  kind            String
+  amount          Decimal  @db.Decimal(18, 2)
+  currency        String   @default("GEL")
+  fxRate          Decimal  @default(1) @map("fx_rate") @db.Decimal(18, 6)
+  note            String?
+  postingKey      String   @unique @map("posting_key")
+  createdAt       DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization  Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  allocations   LandedCostAllocation[]
+
+  @@map("landed_costs")
+}
+
+model LandedCostAllocation {
+  id           String  @id @default(cuid())
+  landedCostId String  @map("landed_cost_id")
+  variantId    String  @map("variant_id")
+  amount       Decimal @db.Decimal(18, 2)
+  postingKey   String  @unique @map("posting_key")
+
+  landedCost LandedCost     @relation(fields: [landedCostId], references: [id], onDelete: Restrict)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@map("landed_cost_allocations")
+}
+
+model GrowthBatch {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  number          String
+  supplierId      String?   @map("supplier_id")
+  variantId       String    @map("variant_id")
+  locationId      String    @map("location_id")
+  stage           String    @default("received")
+  quantity        Decimal   @db.Decimal(18, 3)
+  expectedReadyOn DateTime? @map("expected_ready_on") @db.Date
+  receivedOn      DateTime  @map("received_on") @db.Date
+  status          String    @default("open")
+  notes           String?
+  postingKey      String    @unique @map("posting_key")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier     Supplier?        @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  variant      ProductVariant   @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  location     Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  tasks        GreenhouseTask[]
+
+  @@unique([organizationId, number])
+  @@map("growth_batches")
+}
+
+model GreenhouseTask {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  batchId        String    @map("batch_id")
+  kind           String
+  dueOn          DateTime  @map("due_on") @db.Date
+  doneAt         DateTime? @map("done_at") @db.DateTime(3)
+  notes          String?
+  actorId        String?   @map("actor_id")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  batch        GrowthBatch  @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([batchId])
+  @@map("greenhouse_tasks")
+}
+
+model InventoryCount {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  locationId     String   @map("location_id")
+  number         String
+  status         String   @default("draft")
+  postingKey     String   @unique @map("posting_key")
+  countedOn      DateTime @map("counted_on") @db.Date
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  location     Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  lines        InventoryCountLine[]
+
+  @@unique([organizationId, number])
+  @@map("inventory_counts")
+}
+
+model InventoryCountLine {
+  id         String  @id @default(cuid())
+  countId    String  @map("count_id")
+  variantId  String  @map("variant_id")
+  systemQty  Decimal @map("system_qty") @db.Decimal(18, 3)
+  countedQty Decimal @map("counted_qty") @db.Decimal(18, 3)
+  difference Decimal @db.Decimal(18, 3)
+
+  count   InventoryCount @relation(fields: [countId], references: [id], onDelete: Restrict)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([countId])
+  @@map("inventory_count_lines")
+}
+
+model GreeningProject {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  number         String
+  status         String   @default("draft")
+  siteNotes      String?  @map("site_notes")
+  lightNotes     String?  @map("light_notes")
+  budgetAmount   Decimal  @default(0) @map("budget_amount") @db.Decimal(18, 2)
+  postingKey     String   @unique @map("posting_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines        GreeningProjectLine[]
+
+  @@unique([organizationId, number])
+  @@map("greening_projects")
+}
+
+model GreeningProjectLine {
+  id          String  @id @default(cuid())
+  projectId   String  @map("project_id")
+  kind        String
+  description String
+  quantity    Decimal @default(1) @db.Decimal(18, 3)
+  amount      Decimal @db.Decimal(18, 2)
+
+  project GreeningProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@index([projectId])
+  @@map("greening_project_lines")
+}
+
+model DeliveryTask {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  number         String
+  sourceType     String    @map("source_type")
+  sourceId       String    @map("source_id")
+  customerId     String?   @map("customer_id")
+  driverId       String?   @map("driver_id")
+  status         String    @default("planned")
+  address        String
+  phone          String?
+  mapsUrl        String?   @map("maps_url")
+  quantityNote   String?   @map("quantity_note")
+  instructions   String?
+  windowNote     String?   @map("window_note")
+  postingKey     String    @unique @map("posting_key")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  driver       User?        @relation("DeliveryDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  stops        RouteStop[]
+
+  @@unique([organizationId, number])
+  @@map("delivery_tasks")
+}
+
+model Route {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  date           DateTime @db.Date
+  driverId       String?  @map("driver_id")
+  status         String   @default("draft")
+  postingKey     String   @unique @map("posting_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  driver       User?        @relation("RouteDriver", fields: [driverId], references: [id], onDelete: Restrict)
+  stops        RouteStop[]
+
+  @@unique([organizationId, date, driverId])
+  @@map("routes")
+}
+
+model RouteStop {
+  id             String @id @default(cuid())
+  routeId        String @map("route_id")
+  deliveryTaskId String @map("delivery_task_id")
+  sort           Int    @default(0)
+
+  route Route        @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  task  DeliveryTask @relation(fields: [deliveryTaskId], references: [id], onDelete: Restrict)
+
+  @@unique([routeId, deliveryTaskId])
+  @@index([routeId, sort])
+  @@map("route_stops")
+}
+
+model Campaign {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  name           String
+  goal           String?
+  startOn        DateTime  @map("start_on") @db.Date
+  endOn          DateTime  @map("end_on") @db.Date
+  budgetAmount   Decimal   @default(0) @map("budget_amount") @db.Decimal(18, 2)
+  spendAmount    Decimal?  @map("spend_amount") @db.Decimal(18, 2)
+  attributedRevenue Decimal? @map("attributed_revenue") @db.Decimal(18, 2)
+  notes          String?
+  postingKey     String    @unique @map("posting_key")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, startOn])
+  @@map("campaigns")
+}
+
+model EventBooking {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String?  @map("customer_id")
+  resourceId     String   @map("resource_id")
+  number         String
+  name           String
+  kind           String   @default("other")
+  status         String   @default("booked")
+  startsAt       DateTime @map("starts_at") @db.DateTime(3)
+  endsAt         DateTime @map("ends_at") @db.DateTime(3)
+  guestCount     Int      @default(0) @map("guest_count")
+  budgetAmount   Decimal  @default(0) @map("budget_amount") @db.Decimal(18, 2)
+  sponsorAmount  Decimal  @default(0) @map("sponsor_amount") @db.Decimal(18, 2)
+  ticketAmount   Decimal  @default(0) @map("ticket_amount") @db.Decimal(18, 2)
+  postingKey     String   @unique @map("posting_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer?             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  resource     Resource              @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  staff        StaffAssignment[]
+  holds        ResourceReservation[]
+
+  @@unique([organizationId, number])
+  @@map("event_bookings")
+}
+
+model BankImportBatch {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  filename       String
+  fileHash       String   @map("file_hash")
+  status         String   @default("pending")
+  mapping        Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  rows         BankImportRow[]
+
+  @@unique([organizationId, fileHash])
+  @@map("bank_import_batches")
+}
+
+model BankImportRow {
+  id         String    @id @default(cuid())
+  batchId    String    @map("batch_id")
+  paidOn     DateTime  @map("paid_on") @db.Date
+  amount     Decimal   @db.Decimal(18, 2)
+  purpose    String
+  reference  String?
+  customerId String?   @map("customer_id")
+  invoiceId  String?   @map("invoice_id")
+  status     String    @default("pending")
+  postingKey String?   @unique @map("posting_key")
+
+  batch    BankImportBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  customer Customer?       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([batchId, status])
+  @@map("bank_import_rows")
+}
+
+model CustomerPortalAccount {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  email          String
+  status         String   @default("disabled")
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, email])
+  @@map("customer_portal_accounts")
+}

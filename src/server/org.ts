@@ -77,10 +77,14 @@ export async function provisionOrganization(tx: Tx, organizationId: string): Pro
   }
 }
 
-export function matchSpecies(name: string, species: { id: string; nameKa: string; nameLatin: string | null; aliases: string[] }[]): string | null {
+function aliasList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+export function matchSpecies(name: string, species: { id: string; nameKa: string; nameLatin: string | null; aliases: unknown }[]): string | null {
   const needle = name.trim().toLocaleLowerCase("ka");
   const hits = species.filter((item) => {
-    const names = [item.nameKa, item.nameLatin ?? "", ...item.aliases].map((value) => value.toLocaleLowerCase("ka"));
+    const names = [item.nameKa, item.nameLatin ?? "", ...aliasList(item.aliases)].map((value) => value.toLocaleLowerCase("ka"));
     return names.includes(needle);
   });
   return hits.length === 1 ? hits[0].id : null;
