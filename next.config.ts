@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
-const hostinger = process.env.npm_lifecycle_event === "build:hostinger";
+const hostinger =
+  process.env.PLANTER_HOSTINGER === "1" || process.env.npm_lifecycle_event === "build:hostinger";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
