@@ -20,9 +20,12 @@ async function main() {
     email,
   });
   console.log(`პირველი ადმინის მოწვევა: ${appUrl()}/invite/${token}`);
+  await getDb().$disconnect();
 }
 
-void main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+void main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .then(() => process.exit(0));
