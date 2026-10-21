@@ -44,10 +44,14 @@ export async function customerFilterOptions(organizationId: string) {
   ]);
   return {
     total,
-    types: places.venue_type,
-    zones: places.district,
-    cities: places.city,
-    regions: places.region,
+    types: places.venue_type.map((item) => item.name),
+    zones: places.district.map((item) => item.name),
+    cities: places.city.map((item) => item.name),
+    regions: places.region.map((item) => item.name),
+    typeChoices: places.venue_type,
+    zoneChoices: places.district,
+    cityChoices: places.city,
+    regionChoices: places.region,
   };
 }
 
@@ -92,6 +96,8 @@ export function customerListWhere(organizationId: string, filters: CustomerListF
       ? {
           OR: [
             { name: contains(filters.q) },
+            { identificationCode: contains(filters.q) },
+            { email: contains(filters.q) },
             { phone: contains(filters.q) },
             { phoneNormalized: contains(filters.q) },
             { venueType: contains(filters.q) },

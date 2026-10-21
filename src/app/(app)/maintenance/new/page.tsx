@@ -1,5 +1,6 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
+import { customerOption } from "@/lib/customer-option";
 import { createContractAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -12,7 +13,7 @@ export default async function NewContractPage() {
       <h1>მოვლის ხელშეკრულება</h1>
       <p>საწყისი წესია ფასდაუკლებელი ღირებულების 10%. 1000 ₾ ბაზა იძლევა 100 ₾-ს, არა ფასდაკლებულ გაყიდვას.</p>
       <BoundForm action={createContractAction} label="შენახვა">
-        <label>კლიენტი<ComboBox name="customerId" options={customers.map((customer) => ({ value: customer.id, label: customer.name }))} /></label>
+        <label>კლიენტი<ComboBox name="customerId" options={customers.map(customerOption)} /></label>
         <label>დაწყება<input name="startOn" type="date" required /></label>
         <label>პროცენტი<input name="percent" defaultValue="10" /></label>
         <label>აღწერა<input name="description" defaultValue="მცენარეების ნაკრები" /></label>

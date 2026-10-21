@@ -13,15 +13,20 @@ import { rethrowRedirect, type ActionState } from "@/server/actions/state";
 const attempts = new Map<string, { count: number; at: number }>();
 
 export async function loginAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const login = String(formData.get("login") ?? formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const key = email || "unknown";
+  const key = login.toLowerCase() || "unknown";
   const current = attempts.get(key);
   if (current && current.count >= 8 && Date.now() - current.at < 15 * 60_000) {
     return { ok: false, message: "ძალიან ბევრი მცდელობაა. სცადეთ 15 წუთში." };
   }
   try {
-    const user = await getDb().user.findUnique({ where: { email } });
+    const { equalsInsensitive } = await import("@/server/db");
+    const user = await getDb().user.findFirst({
+      where: {
+        OR: [{ email: login.toLowerCase() }, { username: equalsInsensitive(login) }],
+      },
+    });
     const valid = user ? await verifyPassword(user.passwordHash, password) : false;
     if (!user || !valid || !user.active) {
       const previous = attempts.get(key);

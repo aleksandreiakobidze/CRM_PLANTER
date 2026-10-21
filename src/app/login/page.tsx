@@ -20,8 +20,8 @@ export default function LoginPage() {
         </div>
         <form action={action} className="form">
           <label>
-            ელფოსტა
-            <input name="email" type="email" autoComplete="username" required />
+            მომხმარებელი ან ელფოსტა
+            <input name="login" type="text" autoComplete="username" required />
           </label>
           <label>
             პაროლი

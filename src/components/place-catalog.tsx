@@ -13,7 +13,7 @@ export function PlaceCatalog({
   groups,
   canWrite,
 }: {
-  groups: { kind: string; label: string; rows: { id: string; name: string }[] }[];
+  groups: { kind: string; label: string; rows: { id: string; name: string; code: string }[] }[];
   canWrite: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -23,7 +23,10 @@ export function PlaceCatalog({
 
   const filtered = useMemo(() => {
     return groups.map((group) => {
-      const rows = group.rows.filter((item) => !needle || item.name.toLocaleLowerCase("ka").includes(needle));
+      const rows = group.rows.filter((item) => {
+        if (!needle) return true;
+        return [item.name, item.code].some((part) => part.toLocaleLowerCase("ka").includes(needle));
+      });
       return { ...group, rows, total: group.rows.length };
     });
   }, [groups, needle]);
@@ -71,7 +74,7 @@ export function PlaceCatalog({
                           key={item.id}
                           className="inline-flex items-center gap-1 rounded-full bg-gray-100 py-1 pr-1 pl-2.5 text-sm font-medium text-gray-700 dark:bg-white/5 dark:text-gray-300"
                         >
-                          <span>{item.name}</span>
+                          <span>{item.code ? `${item.name} · ${item.code}` : item.name}</span>
                           {canWrite ? (
                             <form action={deletePlaceTermAction.bind(null, item.id)}>
                               <button

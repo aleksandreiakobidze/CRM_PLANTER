@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { getDb } from "@/server/db";
 import { expireHeldReservations } from "@/server/features/inventory/stock-service";
+import { processMicrosoftOutbox } from "@/server/features/integrations/calendar-sync";
 import { billMaintenancePeriod } from "@/server/features/maintenance/maintenance-service";
 import type { Actor } from "@/server/auth/permissions";
 import { monthKey } from "@/server/time";
@@ -15,6 +16,7 @@ async function ownerActor(organizationId: string): Promise<Actor | null> {
     userId: membership.userId,
     organizationId,
     email: membership.user.email,
+    username: membership.user.username,
     permissions: new Set(membership.role.permissions.map((item) => item.permission.code)),
   };
 }
@@ -29,6 +31,21 @@ export async function runOnce(now = new Date()): Promise<void> {
   }
   const events = await getDb().outboxEvent.findMany({ where: { status: "queued" }, take: 20 });
   for (const event of events) {
+    if (event.type.startsWith("microsoft.")) {
+      try {
+        await processMicrosoftOutbox(event);
+      } catch (error) {
+        await getDb().outboxEvent.update({
+          where: { id: event.id },
+          data: {
+            status: "failed",
+            lastError: error instanceof Error ? error.message.slice(0, 300) : "microsoft",
+            attempts: { increment: 1 },
+          },
+        });
+      }
+      continue;
+    }
     await getDb().outboxEvent.update({
       where: { id: event.id },
       data: { status: "not_configured", lastError: "პროვაიდერი არ არის კონფიგურირებული", attempts: { increment: 1 } },

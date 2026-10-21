@@ -19,7 +19,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
     getDb().customer.findMany({
       where: { organizationId: actor.organizationId, mergedIntoId: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, identificationCode: true, phone: true },
     }),
     getDb().membership.findMany({
       where: { organizationId: actor.organizationId, active: true, user: { active: true } },

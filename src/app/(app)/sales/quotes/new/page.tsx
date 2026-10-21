@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HeaderLinesForm } from "@/components/header-lines-form";
+import { customerOption } from "@/lib/customer-option";
 import { createQuoteAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -24,7 +25,7 @@ export default async function NewQuotePage() {
           mode="sale"
           partyName="customerId"
           partyLabel="კლიენტი"
-          parties={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+          parties={customers.map(customerOption)}
           items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
           extra={<label>შენიშვნა<textarea name="notes" /></label>}
         />

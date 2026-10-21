@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
+import { customerOption } from "@/lib/customer-option";
 import { createProjectAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -21,7 +22,7 @@ export default async function NewProjectPage() {
       <BoundForm action={createProjectAction} label="შენახვა">
         <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
         <label>კლიენტი
-          <ComboBox name="customerId" required options={customers.map((item) => ({ value: item.id, label: item.name }))} />
+          <ComboBox name="customerId" required options={customers.map(customerOption)} />
         </label>
         <label>ობიექტი / ზომები<textarea name="siteNotes" /></label>
         <label>სინათლე<textarea name="lightNotes" /></label>

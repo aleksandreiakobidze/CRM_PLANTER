@@ -1,6 +1,7 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { RecordList } from "@/components/record-list";
+import { customerOption } from "@/lib/customer-option";
 import { bookEventAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -9,6 +10,10 @@ import { BUSINESS_TIME_ZONE, tbilisiDateString } from "@/server/time";
 
 export default async function EventsPage() {
   const actor = await getActor();
+  if (!actor.permissions.has("excursion.read") && !actor.permissions.has("excursion.write")) {
+    const { ADMIN_COPY } = await import("@/server/features/admin/admin-copy");
+    return <p>{ADMIN_COPY.noAccess}</p>;
+  }
   const [events, customers, resources, users] = await Promise.all([
     getDb().eventBooking.findMany({
       where: { organizationId: actor.organizationId },
@@ -33,7 +38,7 @@ export default async function EventsPage() {
           <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
           <label>სახელი<input name="name" required /></label>
           <label>კლიენტი
-            <ComboBox name="customerId" options={[{ value: "", label: "—" }, ...customers.map((item) => ({ value: item.id, label: item.name }))]} />
+            <ComboBox name="customerId" options={[{ value: "", label: "—" }, ...customers.map(customerOption)]} />
           </label>
           <label>სივრცე
             <ComboBox name="resourceId" required options={resources.map((item) => ({ value: item.id, label: item.nameKa }))} />

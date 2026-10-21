@@ -21,7 +21,7 @@ export async function createCampaign(
     postingKey: string;
   },
 ) {
-  requirePermission(actor, "crm.write");
+  requirePermission(actor, "marketing.write");
   const name = input.name.trim();
   if (!name) throw new BusinessError("კამპანიის სახელი სავალდებულოა", "validation");
   try {
@@ -53,7 +53,7 @@ export async function setCampaignActuals(
   actor: Actor,
   input: { campaignId: string; spendAmount?: string; attributedRevenue?: string },
 ) {
-  requirePermission(actor, "crm.write");
+  requirePermission(actor, "marketing.write");
   const campaign = await getDb().campaign.findFirst({
     where: { id: input.campaignId, organizationId: actor.organizationId },
   });

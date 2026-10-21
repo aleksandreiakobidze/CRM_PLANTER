@@ -1,5 +1,6 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
+import { customerOption } from "@/lib/customer-option";
 import { bookExcursionAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -15,7 +16,7 @@ export default async function NewExcursionPage() {
       <h1>ექსკურსიის ჯავშანი</h1>
       <BoundForm action={bookExcursionAction} label="დაჯავშნა">
         <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
-        <label>სკოლა<ComboBox name="customerId" options={customers.map((customer) => ({ value: customer.id, label: customer.name }))} /></label>
+        <label>სკოლა<ComboBox name="customerId" options={customers.map(customerOption)} /></label>
         <label>სივრცე<ComboBox name="resourceId" options={resources.map((resource) => ({ value: resource.id, label: resource.nameKa }))} /></label>
         <label>თარიღი<input name="date" type="date" required /></label>
         <label>დაწყება<input name="startTime" defaultValue="13:00" /></label>

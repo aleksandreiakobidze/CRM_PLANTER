@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HeaderLinesForm } from "@/components/header-lines-form";
+import { customerOption } from "@/lib/customer-option";
 import { bookRentalAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -24,7 +25,7 @@ export default async function NewRentalPage() {
           mode="rental"
           partyName="customerId"
           partyLabel="კლიენტი"
-          parties={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+          parties={customers.map(customerOption)}
           items={assets.map((asset) => ({
             value: asset.id,
             label: `${asset.code} — ${asset.variant.nameKa}`,

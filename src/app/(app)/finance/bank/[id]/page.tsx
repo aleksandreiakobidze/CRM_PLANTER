@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
+import { customerOption } from "@/lib/customer-option";
 import { confirmBankRowAction, skipBankRowAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -35,7 +36,7 @@ export default async function BankBatchPage({ params }: { params: Promise<{ id: 
               <BoundForm action={confirmBankRowAction} label="გადახდის დადასტურება">
                 <input type="hidden" name="rowId" value={row.id} />
                 <label>კლიენტი
-                  <ComboBox name="customerId" required options={customers.map((item) => ({ value: item.id, label: item.name }))} />
+                  <ComboBox name="customerId" required options={customers.map(customerOption)} />
                 </label>
                 <label>ინვოისი
                   <ComboBox

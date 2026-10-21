@@ -3,6 +3,7 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox, MultiSelect } from "@/components/combo-box";
 import { Plus } from "@/components/icons";
+import { customerOption, type CustomerOptionSource } from "@/lib/customer-option";
 import { Button } from "@/components/ui/button";
 import { createTaskAction } from "@/server/actions/work-actions";
 import { useCallback, useState } from "react";
@@ -58,7 +59,7 @@ export function TaskAssignForm({
 }: {
   members: { id: string; name: string }[];
   actorId: string;
-  customers?: { id: string; name: string }[];
+  customers?: CustomerOptionSource[];
   customerId?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -84,7 +85,7 @@ export function TaskAssignForm({
             <label>ვადა<input name="dueOn" type="date" /></label>
             {customers ? (
               <label className="span-2">კლიენტი
-                <ComboBox name="customerId" options={[{ value: "", label: "კლიენტის გარეშე" }, ...customers.map((customer) => ({ value: customer.id, label: customer.name }))]} defaultValue="" />
+                <ComboBox name="customerId" options={[{ value: "", label: "კლიენტის გარეშე" }, ...customers.map(customerOption)]} defaultValue="" />
               </label>
             ) : null}
             <label>აღწერა<textarea name="description" placeholder="რა არის გასაკეთებელი" rows={4} /></label>

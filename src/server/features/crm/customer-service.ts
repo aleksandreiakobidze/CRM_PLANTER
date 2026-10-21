@@ -7,6 +7,7 @@ import { normalizePhone, primaryPhone } from "@/server/phone";
 import { parseDateOnly, tbilisiDateString } from "@/server/time";
 import { prepareTaskFiles, readTaskBytes, removeTaskFiles, writeTaskFiles } from "@/server/features/crm/task-files";
 import { ensurePlaceTerms } from "@/server/features/crm/place-terms";
+import { queueTaskAssignmentMail, queueTaskCalendarSync } from "@/server/features/integrations/calendar-sync";
 import { withTx } from "@/server/tx";
 
 const STATUSES = new Set(["fresh", "to_contact", "quote_sent", "customer", "declined"]);
@@ -317,7 +318,7 @@ export async function createTask(
   const files = prepareTaskFiles(actor.organizationId, input.files ?? []);
   await writeTaskFiles(files);
   try {
-    return await withTx(async (tx) => {
+    const task = await withTx(async (tx) => {
       const task = await tx.task.create({
         data: {
           organizationId: actor.organizationId,
@@ -345,6 +346,9 @@ export async function createTask(
       await audit(tx, actor, "task.create", "task", task.id, undefined, { title, assigneeIds });
       return task;
     });
+    await queueTaskCalendarSync(actor.organizationId, task.id, "upsert");
+    await queueTaskAssignmentMail(actor, task.id, assigneeIds);
+    return task;
   } catch (error) {
     await removeTaskFiles(files);
     throw error;
@@ -432,6 +436,9 @@ export async function cancelTask(actor: Actor, taskId: string) {
     const updated = await tx.task.update({ where: { id: task.id }, data: { status: "cancelled" } });
     await audit(tx, actor, "task.cancel", "task", task.id, { status: task.status }, { status: "cancelled" });
     return updated;
+  }).then(async (updated) => {
+    await queueTaskCalendarSync(actor.organizationId, updated.id, "delete");
+    return updated;
   });
 }
 
@@ -466,7 +473,9 @@ export async function rescheduleTask(actor: Actor, taskId: string, dueOn: string
   const task = await getDb().task.findFirst({ where: { id: taskId, organizationId: actor.organizationId } });
   if (!task) throw new BusinessError("დავალება ვერ მოიძებნა", "not_found");
   if (dueOn && !/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) throw new BusinessError("თარიღის ფორმატი უნდა იყოს YYYY-MM-DD", "validation");
-  return getDb().task.update({ where: { id: task.id }, data: { dueOn: dueOn ? parseDateOnly(dueOn) : null } });
+  const updated = await getDb().task.update({ where: { id: task.id }, data: { dueOn: dueOn ? parseDateOnly(dueOn) : null } });
+  await queueTaskCalendarSync(actor.organizationId, updated.id, dueOn ? "upsert" : "delete");
+  return updated;
 }
 
 export async function mergeCustomers(actor: Actor, targetId: string, sourceId: string) {

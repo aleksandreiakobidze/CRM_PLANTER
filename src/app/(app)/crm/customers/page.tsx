@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListFilters, type CustomerListParams } from "@/server/features/crm/customer-list";
+import { placeOption } from "@/server/features/crm/place-terms";
 import { statusBadge } from "@/server/labels";
 import { displayPhone } from "@/server/phone";
 
@@ -50,7 +51,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const options = await customerFilterOptions(actor.organizationId);
   const filters = customerListFilters(params, options.types, options.zones, options.cities, options.regions);
-  const { types, zones, cities, regions, total } = options;
+  const { typeChoices, zoneChoices, cityChoices, regionChoices, total } = options;
   const customers = await getDb().customer.findMany({
     where: customerListWhere(actor.organizationId, filters),
     include: { addresses: { take: 1, orderBy: { line1: "asc" } } },
@@ -79,23 +80,23 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
         <form className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" role="search" aria-label="კლიენტების ფილტრი">
           <div className="min-w-0">
             <Label htmlFor="customer-q">ძებნა</Label>
-            <Input id="customer-q" name="q" defaultValue={filters.q} placeholder="სახელი, ტელეფონი, მისამართი" />
+            <Input id="customer-q" name="q" defaultValue={filters.q} placeholder="სახელი, ს/კ, ტელეფონი, მისამართი" />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-type">ტიპი</Label>
-            <ComboBox name="type" options={[{ value: "", label: "ყველა" }, ...types.map((value) => ({ value, label: value }))]} defaultValue={filters.type} />
+            <ComboBox name="type" options={[{ value: "", label: "ყველა" }, ...typeChoices.map(placeOption)]} defaultValue={filters.type} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-zone">ზონა</Label>
-            <ComboBox name="zone" options={[{ value: "", label: "ყველა" }, ...zones.map((value) => ({ value, label: value }))]} defaultValue={filters.zone} />
+            <ComboBox name="zone" options={[{ value: "", label: "ყველა" }, ...zoneChoices.map(placeOption)]} defaultValue={filters.zone} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-city">ქალაქი</Label>
-            <ComboBox name="city" options={[{ value: "", label: "ყველა" }, ...cities.map((value) => ({ value, label: value }))]} defaultValue={filters.city} />
+            <ComboBox name="city" options={[{ value: "", label: "ყველა" }, ...cityChoices.map(placeOption)]} defaultValue={filters.city} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-region">რეგიონი</Label>
-            <ComboBox name="region" options={[{ value: "", label: "ყველა" }, ...regions.map((value) => ({ value, label: value }))]} defaultValue={filters.region} />
+            <ComboBox name="region" options={[{ value: "", label: "ყველა" }, ...regionChoices.map(placeOption)]} defaultValue={filters.region} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-priority">პრიორიტეტი</Label>

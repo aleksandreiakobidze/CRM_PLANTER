@@ -2,12 +2,17 @@ import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { PlaceCatalog } from "@/components/place-catalog";
 import { SettingsPanel } from "@/components/settings-panel";
+import { disconnectMicrosoftAction, inviteMemberAction, purgeMasterDataAction } from "@/server/actions/admin-actions";
 import { saveRsCredentialsAction } from "@/server/actions/waybill-actions";
 import { addPlaceTermAction, saveOrganizationAction, setMemberRoleAction } from "@/server/actions/work-actions";
+import { isMasterAdmin } from "@/server/auth/permissions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { ADMIN_COPY, PURGE_GROUP_LABELS } from "@/server/features/admin/admin-copy";
+import { countPurgeGroups, PURGE_GROUPS } from "@/server/features/admin/purge-service";
 import { listAssignableRoles, listTeam } from "@/server/features/admin/team-service";
 import { listPlaceTerms, PLACE_KIND_LABEL, PLACE_KINDS } from "@/server/features/crm/place-terms";
+import { microsoftConfigured } from "@/server/features/integrations/microsoft-graph";
 
 const ADAPTER_NOTE: Record<string, string> = {
   website: "საიტის ფორმა არ არის მიბმული",
@@ -24,16 +29,23 @@ const ADAPTER_NOTE: Record<string, string> = {
 export default async function SettingsPage() {
   const actor = await getActor();
   const canUsers = actor.permissions.has("admin.users");
-  const [organization, connections, placeTerms, members, roles] = await Promise.all([
+  const master = isMasterAdmin(actor);
+  const [organization, connections, placeTerms, members, roles, outlook, purgeCounts] = await Promise.all([
     getDb().organization.findUniqueOrThrow({ where: { id: actor.organizationId } }),
     getDb().integrationConnection.findMany({ where: { organizationId: actor.organizationId }, orderBy: { provider: "asc" } }),
     listPlaceTerms(actor.organizationId),
     canUsers ? listTeam(actor) : Promise.resolve([]),
     canUsers ? listAssignableRoles(actor) : Promise.resolve([]),
+    getDb().userIntegration.findUnique({
+      where: { userId_provider: { userId: actor.userId, provider: "microsoft" } },
+    }),
+    master ? countPurgeGroups(actor) : Promise.resolve(null),
   ]);
   const canPlaces = actor.permissions.has("crm.write");
   const roleOptions = roles.map((role) => ({ value: role.id, label: role.nameKa }));
   const rsReady = connections.find((connection) => connection.provider === "rs")?.status === "configured";
+  const outlookReady = outlook?.status === "configured";
+  const azureReady = microsoftConfigured();
 
   return (
     <section className="space-y-6">
@@ -83,6 +95,21 @@ export default async function SettingsPage() {
               </li>
             ))}
           </ul>
+          <BoundForm action={inviteMemberAction} label={ADMIN_COPY.inviteSubmit}>
+            <label>
+              {ADMIN_COPY.inviteEmail}
+              <input name="email" type="email" required autoComplete="off" />
+            </label>
+            <label>
+              {ADMIN_COPY.inviteName}
+              <input name="name" />
+            </label>
+            <label>
+              {ADMIN_COPY.inviteRole}
+              <ComboBox name="roleId" options={roleOptions} />
+            </label>
+            <p className="text-sm text-gray-400">{ADMIN_COPY.inviteHint}</p>
+          </BoundForm>
         </SettingsPanel>
       ) : null}
 
@@ -103,6 +130,7 @@ export default async function SettingsPage() {
               />
             </label>
             <label>სახელი<input name="name" required /></label>
+            <label>კოდი<input name="code" required /></label>
           </BoundForm>
         ) : null}
         <PlaceCatalog
@@ -110,7 +138,7 @@ export default async function SettingsPage() {
           groups={PLACE_KINDS.map((kind) => ({
             kind,
             label: PLACE_KIND_LABEL[kind],
-            rows: placeTerms.filter((item) => item.kind === kind).map((item) => ({ id: item.id, name: item.name })),
+            rows: placeTerms.filter((item) => item.kind === kind).map((item) => ({ id: item.id, name: item.name, code: item.code })),
           }))}
         />
       </SettingsPanel>
@@ -138,6 +166,50 @@ export default async function SettingsPage() {
           <label><input name="clearRs" type="checkbox" /> გასაღების წაშლა</label>
         </BoundForm>
       </SettingsPanel>
+
+      <SettingsPanel id="microsoft" title={ADMIN_COPY.m365Title} hint={ADMIN_COPY.m365Hint}>
+        {azureReady ? (
+          outlookReady ? (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {ADMIN_COPY.m365Ready} {outlook?.email}
+              </p>
+              <BoundForm action={disconnectMicrosoftAction} label={ADMIN_COPY.m365Disconnect}>
+                <input type="hidden" name="disconnect" value="1" />
+              </BoundForm>
+            </div>
+          ) : (
+            <form action="/api/integrations/microsoft/start" method="get">
+              <button type="submit">{ADMIN_COPY.m365Connect}</button>
+            </form>
+          )
+        ) : (
+          <p className="text-sm text-gray-500 dark:text-gray-400">{ADMIN_COPY.m365Missing}</p>
+        )}
+      </SettingsPanel>
+
+      {master && purgeCounts ? (
+        <SettingsPanel id="purge" title={ADMIN_COPY.purgeTitle} hint={ADMIN_COPY.purgeHint}>
+          <BoundForm action={purgeMasterDataAction} label={ADMIN_COPY.purgeSubmit}>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PURGE_GROUPS.map((group) => (
+                <label key={group} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <input name={`group_${group}`} type="checkbox" />
+                  {PURGE_GROUP_LABELS[group]} ({purgeCounts[group]})
+                </label>
+              ))}
+            </div>
+            <label>
+              {ADMIN_COPY.purgePassword}
+              <input name="password" type="password" autoComplete="current-password" required />
+            </label>
+            <label>
+              {ADMIN_COPY.purgeConfirmLabel} {ADMIN_COPY.purgeConfirmValue}
+              <input name="confirm" required />
+            </label>
+          </BoundForm>
+        </SettingsPanel>
+      ) : null}
 
       <SettingsPanel id="portal" title="კლიენტის პორტალი">
         <p className="text-sm text-gray-500 dark:text-gray-400">

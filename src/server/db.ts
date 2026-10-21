@@ -36,3 +36,10 @@ export function contains(value: string) {
     mode?: "insensitive";
   };
 }
+
+export function equalsInsensitive(value: string) {
+  return (isMysql() ? { equals: value } : { equals: value, mode: "insensitive" as const }) as {
+    equals: string;
+    mode?: "insensitive";
+  };
+}

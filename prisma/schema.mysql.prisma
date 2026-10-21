@@ -88,6 +88,7 @@ model Organization {
   portalAccounts     CustomerPortalAccount[]
   internalShipments  InternalShipment[]
   chatThreads        ChatThread[]
+  userIntegrations   UserIntegration[]
 
   @@map("organizations")
 }
@@ -95,6 +96,7 @@ model Organization {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  username     String?  @unique
   name         String
   passwordHash String   @map("password_hash")
   active       Boolean  @default(true)
@@ -113,6 +115,8 @@ model User {
   routes          Route[]          @relation("RouteDriver")
   chatJoins       ChatParticipant[]
   chatMessages    ChatMessage[]     @relation("ChatAuthor")
+  integrations    UserIntegration[]
+  calendarLinks   CalendarSyncLink[]
 
   @@map("users")
 }
@@ -351,8 +355,9 @@ model Task {
   assignee     User?            @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
   createdBy    User?            @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
   customer     Customer?        @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  assignments  TaskAssignment[]
-  attachments  TaskAttachment[]
+  assignments   TaskAssignment[]
+  attachments   TaskAttachment[]
+  calendarLinks CalendarSyncLink[]
 
   @@index([organizationId, assigneeId, status])
   @@index([organizationId, createdById])
@@ -418,11 +423,13 @@ model PlaceTerm {
   organizationId String   @map("organization_id")
   kind           String
   name           String
+  code           String   @default(cuid())
   createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(3)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, kind, name])
+  @@unique([organizationId, code])
   @@index([organizationId, kind])
   @@map("place_terms")
 }
@@ -1763,4 +1770,42 @@ model ChatMessage {
 
   @@index([threadId, createdAt])
   @@map("chat_messages")
+}
+
+model UserIntegration {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  userId          String    @map("user_id")
+  provider        String
+  status          String    @default("not_configured")
+  secretCipher    String?   @map("secret_cipher")
+  expiresAt       DateTime? @map("expires_at") @db.DateTime(3)
+  microsoftUserId String?   @map("microsoft_user_id")
+  email           String?
+  lastError       String?   @map("last_error")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, provider])
+  @@index([organizationId, provider])
+  @@map("user_integrations")
+}
+
+model CalendarSyncLink {
+  id           String   @id @default(cuid())
+  taskId       String   @map("task_id")
+  userId       String   @map("user_id")
+  graphEventId String   @map("graph_event_id")
+  etag         String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, userId])
+  @@map("calendar_sync_links")
 }

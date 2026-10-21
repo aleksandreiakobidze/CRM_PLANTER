@@ -1,6 +1,7 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { RecordList } from "@/components/record-list";
+import { customerOption } from "@/lib/customer-option";
 import { campaignActualsAction, createCampaignAction, templateLogAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -9,6 +10,10 @@ import { tbilisiDateString } from "@/server/time";
 
 export default async function MarketingPage() {
   const actor = await getActor();
+  if (!actor.permissions.has("marketing.read")) {
+    const { ADMIN_COPY } = await import("@/server/features/admin/admin-copy");
+    return <p>{ADMIN_COPY.noAccess}</p>;
+  }
   const [campaigns, customers] = await Promise.all([
     campaignSummaries(actor),
     getDb().customer.findMany({ where: { organizationId: actor.organizationId, mergedIntoId: null }, orderBy: { name: "asc" } }),
@@ -68,7 +73,7 @@ export default async function MarketingPage() {
         <h2>შაბლონი კომუნიკაციის ჟურნალში</h2>
         <BoundForm action={templateLogAction} label="ჟურნალში ჩაწერა">
           <label>კლიენტი
-            <ComboBox name="customerId" required options={customers.map((item) => ({ value: item.id, label: item.name }))} />
+            <ComboBox name="customerId" required options={customers.map(customerOption)} />
           </label>
           <label>ტექსტი<textarea name="body" required /></label>
         </BoundForm>

@@ -104,7 +104,12 @@ export async function updateCustomerAction(customerId: string, _prev: ActionStat
 export async function addPlaceTermAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
-    await addPlaceTerm(actor, String(formData.get("kind") ?? ""), String(formData.get("name") ?? ""));
+    await addPlaceTerm(
+      actor,
+      String(formData.get("kind") ?? ""),
+      String(formData.get("name") ?? ""),
+      String(formData.get("code") ?? ""),
+    );
     revalidatePath("/settings");
     revalidatePath("/crm/customers");
     revalidatePath("/crm/customers/new");

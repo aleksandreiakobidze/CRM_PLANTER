@@ -5,7 +5,11 @@ import { ChevronDown } from "@/components/icons";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-export type ComboOption = { value: string; label: string };
+export type ComboOption = { value: string; label: string; search?: string };
+
+function optionMatches(option: ComboOption, lowered: string) {
+  return [option.label, option.search ?? ""].some((part) => part.toLocaleLowerCase("ka").includes(lowered));
+}
 
 function initialValue(options: ComboOption[], defaultValue: string) {
   if (options.some((option) => option.value === defaultValue)) return defaultValue;
@@ -108,7 +112,7 @@ export function ComboBox({
     const needle = query.trim();
     const lowered = needle.toLocaleLowerCase("ka");
     const filtered = lowered
-      ? options.filter((option) => option.label.toLocaleLowerCase("ka").includes(lowered))
+      ? options.filter((option) => optionMatches(option, lowered))
       : options;
     if (
       allowCreate
@@ -220,7 +224,7 @@ export function MultiSelect({
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ka");
     if (!needle) return options;
-    return options.filter((option) => option.label.toLocaleLowerCase("ka").includes(needle));
+    return options.filter((option) => optionMatches(option, needle));
   }, [options, query]);
 
   useEffect(() => {

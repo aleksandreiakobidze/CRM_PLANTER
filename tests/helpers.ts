@@ -38,6 +38,7 @@ export async function makeWorld(roleCode = "owner"): Promise<{ actor: Actor; org
       userId: user.id,
       organizationId: organization.id,
       email: user.email,
+      username: user.username,
       permissions: new Set(ROLE_PRESETS[roleCode].permissions),
     },
   };

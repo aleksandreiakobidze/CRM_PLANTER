@@ -127,11 +127,16 @@ function NavLink({ href, label, path, onNavigate }: { href: string; label: strin
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, allowedHrefs }: { children: React.ReactNode; allowedHrefs: string[] }) {
   const path = usePathname();
   const router = useRouter();
   const [compact, setCompact] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const allowed = new Set(allowedHrefs);
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter(([href]) => allowed.has(href)),
+  })).filter((group) => group.links.length > 0);
 
   useEffect(() => {
     if (window.localStorage.getItem("planter-nav-compact") === "1") setCompact(true);
@@ -162,7 +167,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         chord = true;
         return;
       }
-      if (chord && GO[event.key]) {
+      if (chord && GO[event.key] && allowed.has(GO[event.key])) {
         event.preventDefault();
         router.push(GO[event.key]);
       }
@@ -170,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, allowedHrefs]);
 
   function toggleNav() {
     setCompact((current) => {
@@ -195,9 +200,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="nav-label">{compact ? "გაშლა" : "მენიუს შეკეცვა"}</span>
         </button>
         <nav aria-label="მთავარი ნავიგაცია">
-          {compact ? GROUPS.flatMap((group) => group.links).map(([href, label]) => (
+          {compact ? groups.flatMap((group) => group.links).map(([href, label]) => (
             <NavLink key={href} href={href} label={label} path={path} onNavigate={() => setNavOpen(false)} />
-          )) : GROUPS.map((group) => (
+          )) : groups.map((group) => (
             <details key={group.title} className="nav-group" open>
               <summary>{group.title}</summary>
               {group.links.map(([href, label]) => (
@@ -226,7 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             მენიუ
           </button>
           <form className="search" action="/search" role="search">
-            <input name="q" type="search" placeholder="კლიენტი, ტელეფონი, SKU ან ინვოისი" aria-label="ძებნა" enterKeyHint="search" />
+            <input name="q" type="search" placeholder="კლიენტი, ს/კ, ტელეფონი, SKU ან ინვოისი" aria-label="ძებნა" enterKeyHint="search" />
             <button type="submit">ძებნა</button>
           </form>
           <div className="topbar-tools">

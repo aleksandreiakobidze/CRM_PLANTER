@@ -1,6 +1,7 @@
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { RecordList } from "@/components/record-list";
+import { customerOption } from "@/lib/customer-option";
 import { createDeliveryAction, deliveryStatusAction, saveRouteAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { can } from "@/server/auth/permissions";
@@ -57,7 +58,7 @@ export default async function DeliveryPage() {
             </label>
             <label>წყაროს ID<input name="sourceId" required /></label>
             <label>კლიენტი
-              <ComboBox name="customerId" options={[{ value: "", label: "—" }, ...customers.map((item) => ({ value: item.id, label: item.name }))]} />
+              <ComboBox name="customerId" options={[{ value: "", label: "—" }, ...customers.map(customerOption)]} />
             </label>
             <label>მისამართი<input name="address" required /></label>
             <label>ტელეფონი<input name="phone" /></label>

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
-    "build:hostinger": "node scripts/make-mysql-schema.mjs && prisma generate --schema prisma/schema.mysql.prisma && prisma db push --schema prisma/schema.mysql.prisma && PLANTER_HOSTINGER=1 node scripts/hostinger-next-build.mjs",
+    "build:hostinger": "node scripts/make-mysql-schema.mjs && prisma generate --schema prisma/schema.mysql.prisma && prisma db push --schema prisma/schema.mysql.prisma && tsx scripts/ensure-admin.ts && tsx scripts/ensure-place-codes.ts && PLANTER_HOSTINGER=1 node scripts/hostinger-next-build.mjs",
+    "admin:ensure": "tsx scripts/ensure-admin.ts",
     "start": "next start",
     "worker": "tsx src/worker.ts",
     "db:up": "tsx scripts/dev-db.ts",

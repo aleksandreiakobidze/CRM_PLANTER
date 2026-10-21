@@ -46,6 +46,7 @@ export async function actorFromToken(token: string): Promise<Actor> {
     userId: session.user.id,
     organizationId: membership.organizationId,
     email: session.user.email,
+    username: session.user.username,
     permissions: new Set(membership.role.permissions.map((item) => item.permission.code)),
   };
 }

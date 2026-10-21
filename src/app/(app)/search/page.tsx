@@ -11,9 +11,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <section className="grid">
       <div className="page-head">
         <h1>{q ? `ძებნა: ${q}` : "ძებნა"}</h1>
-        <p>სახელი, ტელეფონი, SKU ან დოკუმენტის ნომერი.</p>
+        <p>სახელი, საიდენტიფიკაციო კოდი, ტელეფონი, SKU ან დოკუმენტის ნომერი.</p>
       </div>
-      {empty ? <p className="card">ვერაფერი მოიძებნა. სცადეთ სახელი, ტელეფონი, SKU ან დოკუმენტის ნომერი.</p> : null}
+      {empty ? <p className="card">ვერაფერი მოიძებნა. სცადეთ სახელი, საიდენტიფიკაციო კოდი, ტელეფონი, SKU ან დოკუმენტის ნომერი.</p> : null}
       {result.customers.length > 0 ? (
         <div className="grid">
           <h2>კლიენტები</h2>

@@ -26,6 +26,8 @@ export const PERMISSIONS = [
   "purchase.write",
   "delivery.read",
   "delivery.write",
+  "marketing.read",
+  "marketing.write",
 ] as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[number];
@@ -89,15 +91,23 @@ export const ROLE_PRESETS: Record<string, { nameKa: string; permissions: Permiss
     nameKa: "ფინანსები",
     permissions: ["finance.read", "finance.write", "reports.read", "crm.read", "sales.read"],
   },
-  marketing: { nameKa: "მარკეტინგი", permissions: ["crm.read", "crm.write", "reports.read"] },
+  marketing: {
+    nameKa: "მარკეტინგი",
+    permissions: ["marketing.read", "marketing.write", "crm.read", "crm.write", "reports.read", "excursion.write"],
+  },
 };
 
 export type Actor = {
   userId: string;
   organizationId: string;
   email: string;
+  username?: string | null;
   permissions: Set<string>;
 };
+
+export function isMasterAdmin(actor: Actor): boolean {
+  return actor.username === "Admin";
+}
 
 export function requirePermission(actor: Actor, permission: PermissionCode): void {
   if (!actor.permissions.has(permission)) {
