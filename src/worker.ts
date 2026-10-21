@@ -36,8 +36,9 @@ export async function runOnce(now = new Date()): Promise<void> {
   }
 }
 
-const worker = process.argv[1]?.includes("worker");
-if (worker) {
+const entry = process.argv[1] ?? "";
+const launchedAsCli = /(?:^|[\\/])worker\.(?:ts|js|mjs)$/.test(entry);
+if (launchedAsCli) {
   runOnce()
     .then(() => {
       console.log("worker cycle done");
