@@ -3,6 +3,7 @@ import { HeaderLinesForm } from "@/components/header-lines-form";
 import { createSalesOrderAction } from "@/server/actions/waybill-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { tbilisiDateString } from "@/server/time";
 
 export default async function NewOrderPage() {
   const actor = await getActor();
@@ -26,7 +27,12 @@ export default async function NewOrderPage() {
           partyLabel="კლიენტი"
           parties={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
           items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
-          extra={<label>შენიშვნა<textarea name="notes" /></label>}
+          extra={
+            <>
+              <label>თარიღი<input name="orderedOn" type="date" required defaultValue={tbilisiDateString()} /></label>
+              <label>შენიშვნა<textarea name="notes" /></label>
+            </>
+          }
         />
       </div>
     </section>

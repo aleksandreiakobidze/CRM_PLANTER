@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
+import { ComposePanel } from "@/components/compose-panel";
 import { CustomerFields } from "@/components/customer-fields";
+import { CustomerFilesTab } from "@/components/customer-files-tab";
 import { DocTabs } from "@/components/doc-tabs";
 import { RecordList } from "@/components/record-list";
 import { TaskAssignForm } from "@/components/task-assign-form";
@@ -14,6 +16,7 @@ import { D } from "@/server/money";
 import { displayPhone } from "@/server/phone";
 import { formatDateOnly, tbilisiDateString } from "@/server/time";
 import { loadInvoiceSources } from "@/server/features/finance/invoice-source";
+import { listPlaceOptions, selectOptions } from "@/server/features/crm/place-terms";
 
 const RESULTS = [
   { value: "no_answer", label: "ვერ დავუკავშირდი" },
@@ -23,7 +26,7 @@ const RESULTS = [
 ];
 const TASK_LABEL: Record<string, string> = { open: "გასაკეთებელი", doing: "მიმდინარე", done: "შესრულებული", cancelled: "გაუქმებული" };
 const KIND_LABEL: Record<string, string> = { company: "კომპანია", person: "ფიზიკური პირი" };
-const TABS = ["card", "contacts", "addresses", "calls", "tasks", "history"] as const;
+const TABS = ["card", "contacts", "addresses", "calls", "tasks", "files", "history"] as const;
 const HIST = ["quotes", "orders", "invoices"] as const;
 type HistKind = (typeof HIST)[number];
 
@@ -61,7 +64,7 @@ function HistoryList({
   base: string;
   status?: string;
   quotes: { id: string; number: string; status: string; createdAt: Date; lines: { lineTotal: { toString(): string } }[] }[];
-  orders: { id: string; number: string; status: string; createdAt: Date; lines: { lineTotal: { toString(): string } }[] }[];
+  orders: { id: string; number: string; status: string; createdAt: Date; orderedOn: Date; lines: { lineTotal: { toString(): string } }[] }[];
   invoices: { id: string; number: string | null; status: string; createdAt: Date; total: { toString(): string }; source: { href: string; label: string } | null }[];
 }) {
   const rows = kind === "quotes"
@@ -80,7 +83,7 @@ function HistoryList({
           id: order.id,
           href: `/sales/orders/${order.id}`,
           number: order.number,
-          date: tbilisiDateString(order.createdAt),
+          date: formatDateOnly(order.orderedOn),
           status: order.status,
           statusLabel: orderStatusLabel(order.status),
           total: sumLines(order.lines),
@@ -156,16 +159,26 @@ export default async function CustomerPage({
   const requested = query.tab;
   const tab = TABS.includes(requested as (typeof TABS)[number]) ? requested! : "card";
   const hist: HistKind | null = tab === "history" && HIST.includes(query.hist as HistKind) ? (query.hist as HistKind) : null;
-  const customer = await getDb().customer.findFirst({
-    where: { id, organizationId: actor.organizationId },
-    include: {
-      contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
-      addresses: true,
-      activities: { orderBy: { occurredAt: "desc" } },
-      tasks: { orderBy: { dueOn: "asc" }, include: { assignments: { include: { user: true } } } },
-    },
-  });
+  const [customer, places] = await Promise.all([
+    getDb().customer.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      include: {
+        contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
+        addresses: true,
+        activities: { orderBy: { occurredAt: "desc" } },
+        tasks: { orderBy: { dueOn: "asc" }, include: { assignments: { include: { user: true } } } },
+        files: { orderBy: { createdAt: "desc" } },
+      },
+    }),
+    listPlaceOptions(actor.organizationId),
+  ]);
   if (!customer) notFound();
+  const placeSelects = {
+    venueTypes: selectOptions(places.venue_type),
+    districts: selectOptions(places.district),
+    cities: selectOptions(places.city),
+    regions: selectOptions(places.region),
+  };
   const members = actor.permissions.has("crm.write")
     ? await getDb().membership.findMany({
         where: { organizationId: actor.organizationId, active: true, user: { active: true } },
@@ -212,6 +225,7 @@ export default async function CustomerPage({
     { id: "addresses", label: "მისამართები", href: `${base}?tab=addresses` },
     { id: "calls", label: "ზარები", href: `${base}?tab=calls` },
     { id: "tasks", label: "დავალებები", href: `${base}?tab=tasks` },
+    { id: "files", label: "ფაილები", href: `${base}?tab=files` },
     { id: "history", label: "ისტორია", href: `${base}?tab=history` },
   ];
   return (
@@ -240,6 +254,7 @@ export default async function CustomerPage({
               mapFallback={mapFallback}
               addressHint
               showDoNotContact
+              places={placeSelects}
               values={{
                 kind: customer.kind,
                 name: customer.name,
@@ -276,15 +291,21 @@ export default async function CustomerPage({
       ) : null}
 
       {tab === "contacts" ? (
-        <div className="card doc-card">
-          <h2 className="doc-title">კონტაქტები</h2>
-          <BoundForm action={addContactAction.bind(null, customer.id)} label="კონტაქტის დამატება">
-            <label>სახელი<input name="name" required /></label>
+        <div className="card doc-card tasks-panel">
+          <div>
+            <h2 className="doc-title">კონტაქტები</h2>
+          </div>
+          <ComposePanel
+            buttonLabel="ახალი კონტაქტი"
+            submitLabel="შენახვა"
+            action={addContactAction.bind(null, customer.id)}
+          >
+            <label>სახელი<input name="name" required autoFocus /></label>
             <label>თანამდებობა<input name="title" /></label>
             <label>ტელეფონი<input name="phone" /></label>
             <label>ელფოსტა<input name="email" type="email" /></label>
             <label><input name="isPrimary" type="checkbox" value="yes" /> მთავარი კონტაქტი</label>
-          </BoundForm>
+          </ComposePanel>
           <RecordList
             storageKey={`customer-${customer.id}-contacts`}
             empty="კონტაქტი ჯერ არ არის."
@@ -310,15 +331,21 @@ export default async function CustomerPage({
       ) : null}
 
       {tab === "addresses" ? (
-        <div className="card doc-card">
-          <h2 className="doc-title">მისამართები</h2>
-          <BoundForm action={addAddressAction.bind(null, customer.id)} label="მისამართის დამატება">
+        <div className="card doc-card tasks-panel">
+          <div>
+            <h2 className="doc-title">მისამართები</h2>
+          </div>
+          <ComposePanel
+            buttonLabel="ახალი მისამართი"
+            submitLabel="შენახვა"
+            action={addAddressAction.bind(null, customer.id)}
+          >
             <label>იარლიყი<input name="label" defaultValue="მთავარი" /></label>
-            <label>ქუჩა<input name="line1" required /></label>
-            <label>ქალაქი<input name="city" /></label>
-            <label>რეგიონი<input name="region" /></label>
-            <label>უბანი<input name="district" /></label>
-          </BoundForm>
+            <label>ქუჩა<input name="line1" required autoFocus /></label>
+            <label>ქალაქი<ComboBox name="city" allowCreate options={placeSelects.cities} placeholder="არჩევა ან დამატება" /></label>
+            <label>რეგიონი<ComboBox name="region" allowCreate options={placeSelects.regions} placeholder="არჩევა ან დამატება" /></label>
+            <label>უბანი<ComboBox name="district" allowCreate options={placeSelects.districts} placeholder="არჩევა ან დამატება" /></label>
+          </ComposePanel>
           <RecordList
             storageKey={`customer-${customer.id}-addresses`}
             empty="მისამართი ჯერ არ არის."
@@ -335,12 +362,18 @@ export default async function CustomerPage({
       ) : null}
 
       {tab === "calls" ? (
-        <div className="card doc-card">
-          <h2 className="doc-title">ზარები</h2>
-          <BoundForm action={addActivityAction.bind(null, customer.id)} label="ზარის ჩაწერა">
+        <div className="card doc-card tasks-panel">
+          <div>
+            <h2 className="doc-title">ზარები</h2>
+          </div>
+          <ComposePanel
+            buttonLabel="ახალი ზარი"
+            submitLabel="შენახვა"
+            action={addActivityAction.bind(null, customer.id)}
+          >
             <label>შედეგი<ComboBox name="result" options={RESULTS} defaultValue="no_answer" /></label>
             <label>ტექსტი<textarea name="body" required /></label>
-          </BoundForm>
+          </ComposePanel>
           <RecordList
             storageKey={`customer-${customer.id}-calls`}
             empty="ზარი ჯერ არ არის."
@@ -379,7 +412,7 @@ export default async function CustomerPage({
             rows={customer.tasks.map((task) => ({
               id: task.id,
               cells: {
-                title: task.title,
+                title: <Link href={`/work/${task.id}`}>{task.title}</Link>,
                 people: task.assignments.map((item) => `${item.user.name}${item.status === "done" ? " · შესრულებული" : ""}`).join(", ") || "—",
                 status: TASK_LABEL[task.status] ?? task.status,
                 due: task.dueOn ? formatDateOnly(task.dueOn) : "ვადის გარეშე",
@@ -387,6 +420,14 @@ export default async function CustomerPage({
             }))}
           />
         </div>
+      ) : null}
+
+      {tab === "files" ? (
+        <CustomerFilesTab
+          customerId={customer.id}
+          canWrite={actor.permissions.has("crm.write")}
+          files={customer.files}
+        />
       ) : null}
 
       {tab === "history" ? (

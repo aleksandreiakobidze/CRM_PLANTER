@@ -164,17 +164,17 @@ export async function uploadSale(actor: Actor, orderId: string) {
     return { ok: true as const, id: fulfillment.rsWaybillId ?? "", number: fulfillment.rsWaybillNumber };
   }
   const variants = await getDb().productVariant.findMany({
-    where: { id: { in: fulfillment.order.lines.map((line) => line.variantId) } },
+    where: { id: { in: fulfillment.order.lines.map((line) => line.variantId).filter((id): id is string => Boolean(id)) } },
   });
   const byId = new Map(variants.map((variant) => [variant.id, variant]));
   const goods = fulfillment.order.lines.map((line) => {
-    const variant = byId.get(line.variantId);
+    const variant = line.variantId ? byId.get(line.variantId) : undefined;
     return {
       name: line.description,
       quantity: D(line.quantity).toFixed(3),
       price: D(line.unitPrice).toFixed(4),
       amount: D(line.lineTotal).toFixed(2),
-      barCode: variant?.barcode || variant?.sku || line.variantId,
+      barCode: variant?.barcode || variant?.sku || line.variantId || "",
     };
   });
   const fullAmount = fulfillment.order.lines.reduce((sum, line) => sum.plus(D(line.lineTotal)), D(0)).toFixed(2);

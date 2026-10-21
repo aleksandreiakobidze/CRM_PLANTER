@@ -5,6 +5,7 @@ import { BoundForm } from "@/components/bound-form";
 import { ComboBox, type ComboOption } from "@/components/combo-box";
 import { DocumentLines, type CatalogItem } from "@/components/document-lines";
 import type { ActionState } from "@/server/actions/state";
+import type { LineKind } from "@/server/features/sales/line-kinds";
 
 export function HeaderLinesForm({
   action,
@@ -26,7 +27,7 @@ export function HeaderLinesForm({
   partyDefault?: string;
   parties?: ComboOption[];
   items: CatalogItem[];
-  initialLines?: { itemId: string; quantity: string; unitPrice: string; discountAmount: string }[];
+  initialLines?: { kind?: LineKind; itemId: string; description?: string; quantity: string; unitPrice: string; discountAmount: string }[];
   extra?: React.ReactNode;
 }) {
   const [postingKey] = useState(() => crypto.randomUUID());

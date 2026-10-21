@@ -39,6 +39,26 @@ export function taskFilePath(storageKey: string) {
   return full;
 }
 
+const CONTRACT_EXT = new Set(["pdf", "doc", "docx"]);
+const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
+
+export function prepareCustomerFiles(organizationId: string, kind: string, files: { name: string; bytes: Buffer }[]) {
+  if (kind !== "contract" && kind !== "image") throw new BusinessError("ფაილის ტიპი არასწორია", "validation");
+  if (files.length === 0) throw new BusinessError("ფაილი ატვირთეთ", "validation");
+  const prepared = prepareTaskFiles(organizationId, files);
+  const allowed = kind === "contract" ? CONTRACT_EXT : IMAGE_EXT;
+  for (const file of prepared) {
+    const extension = path.extname(file.fileName).slice(1).toLowerCase();
+    if (!allowed.has(extension)) {
+      throw new BusinessError(
+        kind === "contract" ? "ხელშეკრულება უნდა იყოს PDF ან Word" : "სურათი უნდა იყოს PNG, JPG, WEBP ან GIF",
+        "validation",
+      );
+    }
+  }
+  return prepared;
+}
+
 export function prepareTaskFiles(organizationId: string, files: { name: string; bytes: Buffer }[]) {
   if (files.length > MAX_TASK_FILES) throw new BusinessError("მაქსიმუმ 5 ფაილი შეიძლება", "validation");
   return files.map((file) => {

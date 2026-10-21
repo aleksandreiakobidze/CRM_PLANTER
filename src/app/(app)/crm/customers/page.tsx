@@ -49,8 +49,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const actor = await getActor();
   const params = await searchParams;
   const options = await customerFilterOptions(actor.organizationId);
-  const filters = customerListFilters(params, options.types, options.zones);
-  const { types, zones, total } = options;
+  const filters = customerListFilters(params, options.types, options.zones, options.cities, options.regions);
+  const { types, zones, cities, regions, total } = options;
   const customers = await getDb().customer.findMany({
     where: customerListWhere(actor.organizationId, filters),
     include: { addresses: { take: 1, orderBy: { line1: "asc" } } },
@@ -88,6 +88,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           <div className="min-w-0">
             <Label htmlFor="customer-zone">ზონა</Label>
             <ComboBox name="zone" options={[{ value: "", label: "ყველა" }, ...zones.map((value) => ({ value, label: value }))]} defaultValue={filters.zone} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-city">ქალაქი</Label>
+            <ComboBox name="city" options={[{ value: "", label: "ყველა" }, ...cities.map((value) => ({ value, label: value }))]} defaultValue={filters.city} />
+          </div>
+          <div className="min-w-0">
+            <Label htmlFor="customer-region">რეგიონი</Label>
+            <ComboBox name="region" options={[{ value: "", label: "ყველა" }, ...regions.map((value) => ({ value, label: value }))]} defaultValue={filters.region} />
           </div>
           <div className="min-w-0">
             <Label htmlFor="customer-priority">პრიორიტეტი</Label>

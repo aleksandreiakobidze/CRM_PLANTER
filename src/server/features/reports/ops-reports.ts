@@ -1,5 +1,5 @@
 import type { Actor } from "@/server/auth/permissions";
-import { can, requirePermission } from "@/server/auth/permissions";
+import { can, canSeeSalesTotals, requirePermission } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { D, Decimal, roundMoney } from "@/server/money";
 import { invoiceBalance } from "@/server/features/finance/invoice-service";
@@ -10,7 +10,7 @@ import { formatDateOnly, parseDateOnly, tbilisiDateString } from "@/server/time"
 export type AgingBucket = { invoiceId: string; number: string | null; customer: string; remaining: string; days: number; bucket: string };
 
 export async function agingReport(actor: Actor, asOf = tbilisiDateString()): Promise<AgingBucket[]> {
-  requirePermission(actor, "reports.read");
+  requirePermission(actor, "reports.sales.read");
   const invoices = await getDb().invoice.findMany({
     where: { organizationId: actor.organizationId, status: "posted" },
     include: { customer: true },
@@ -87,13 +87,15 @@ export async function campaignSummaries(actor: Actor) {
 
 export async function opsDashboard(actor: Actor, fromIso: string, toIso: string) {
   requirePermission(actor, "reports.read");
-  const sales = await salesDashboard(actor, fromIso, toIso);
-  const aging = await agingReport(actor, toIso);
+  const showSales = canSeeSalesTotals(actor);
+  const sales = showSales ? await salesDashboard(actor, fromIso, toIso) : null;
+  const aging = showSales ? await agingReport(actor, toIso) : [];
   const openPo = await openPurchaseOrders(actor);
   const batches = await greenhouseBatches(actor);
   const delivery = can(actor, "delivery.read") ? await deliveryDayReport(actor, toIso) : [];
   const overdue = roundMoney(aging.reduce((sum, row) => sum.plus(D(row.remaining)), new Decimal(0)));
   return {
+    showSales,
     sales,
     overdue: overdue.toFixed(2),
     aging,

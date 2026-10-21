@@ -1,4 +1,4 @@
-import { ComboBox } from "@/components/combo-box";
+import { ComboBox, type ComboOption } from "@/components/combo-box";
 import { MapsUrlField } from "@/components/maps-url-field";
 
 const KINDS = [{ value: "company", label: "კომპანია" }, { value: "person", label: "ფიზიკური პირი" }];
@@ -57,12 +57,19 @@ export function CustomerFields({
   mapFallback,
   addressHint = false,
   showDoNotContact = false,
+  places,
 }: {
   values?: CustomerFieldValues;
   placeName: string;
   mapFallback: string;
   addressHint?: boolean;
   showDoNotContact?: boolean;
+  places: {
+    venueTypes: ComboOption[];
+    districts: ComboOption[];
+    cities: ComboOption[];
+    regions: ComboOption[];
+  };
 }) {
   return (
     <>
@@ -72,15 +79,15 @@ export function CustomerFields({
         <label>სახელი<input name="name" required defaultValue={values?.name ?? ""} /></label>
         <label>იურიდიული დასახელება<input name="legalName" defaultValue={values?.legalName ?? ""} /></label>
         <label>დირექტორი<input name="directorName" defaultValue={values?.directorName ?? ""} /></label>
-        <label>ობიექტის ტიპი<input name="venueType" defaultValue={values?.venueType ?? ""} placeholder="კაფე, რესტორანი..." /></label>
+        <label>ობიექტის ტიპი<ComboBox name="venueType" allowCreate options={places.venueTypes} defaultValue={values?.venueType ?? ""} placeholder="არჩევა ან დამატება" /></label>
         <label>სეგმენტი<ComboBox name="segment" options={SEGMENTS} defaultValue={values?.segment || "horeca"} /></label>
         <label>საიდენტიფიკაციო კოდი<input name="identificationCode" defaultValue={values?.identificationCode ?? ""} /></label>
       </fieldset>
       <fieldset className="group">
         <legend>სად დგას</legend>
-        <label>ზონა<input name="district" defaultValue={values?.district ?? ""} placeholder="ვაჟა, საბურთალო..." /></label>
-        <label>ქალაქი<input name="city" defaultValue={values?.city ?? ""} /></label>
-        <label>რეგიონი<input name="region" defaultValue={values?.region ?? ""} /></label>
+        <label>ზონა<ComboBox name="district" allowCreate options={places.districts} defaultValue={values?.district ?? ""} placeholder="არჩევა ან დამატება" /></label>
+        <label>ქალაქი<ComboBox name="city" allowCreate options={places.cities} defaultValue={values?.city ?? ""} placeholder="არჩევა ან დამატება" /></label>
+        <label>რეგიონი<ComboBox name="region" allowCreate options={places.regions} defaultValue={values?.region ?? ""} placeholder="არჩევა ან დამატება" /></label>
         {addressHint ? <p className="muted">ქუჩა მისამართების ტაბში იცვლება.</p> : null}
       </fieldset>
       <fieldset className="group">

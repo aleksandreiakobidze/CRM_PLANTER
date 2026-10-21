@@ -28,60 +28,44 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
     }),
   ]);
   const today = tbilisiDateString();
-  const openCount = tasks.filter((task) => task.status === "open" || task.status === "doing").length;
+  const form = canWrite ? (
+    <TaskAssignForm
+      actorId={actor.userId}
+      customers={customers}
+      members={members.map((member) => ({ id: member.userId, name: member.user.name }))}
+    />
+  ) : null;
   return (
-    <section className="grid">
-      <div className="work-top">
-        <div className="page-head">
-          <div className="row">
-            <h1>ჩემი სამუშაო</h1>
-            <div className="segment" role="group" aria-label="დავალებების არე">
-              <Link href="/work" aria-current={scope === "mine" ? "page" : undefined}>ჩემი</Link>
-              {canSeeAll ? <Link href="/work?scope=all" aria-current={scope === "all" ? "page" : undefined}>ყველა</Link> : null}
-            </div>
-          </div>
-          <p>{scope === "all" ? "ორგანიზაციის ყველა დავალება." : "მხოლოდ შენზე გაცემული დავალება."} ღია და მიმდინარე: {openCount}.</p>
+    <section className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white/90">დავალებები</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {scope === "all" ? "ორგანიზაციის ყველა დავალება." : "შენზე გაცემული დავალება."}
+          </p>
         </div>
-        {canWrite ? (
-          <TaskAssignForm
-            actorId={actor.userId}
-            customers={customers}
-            members={members.map((member) => ({ id: member.userId, name: member.user.name }))}
-          />
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/work"
+            aria-current={scope === "mine" ? "page" : undefined}
+            className={`inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium ${scope === "mine" ? "bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/[0.03]"}`}
+          >
+            ჩემი
+          </Link>
+          {canSeeAll ? (
+            <Link
+              href="/work?scope=all"
+              aria-current={scope === "all" ? "page" : undefined}
+              className={`inline-flex h-9 items-center rounded-lg px-3 text-sm font-medium ${scope === "all" ? "bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400" : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/[0.03]"}`}
+            >
+              ყველა
+            </Link>
+          ) : null}
+        </div>
       </div>
-      <Fold id="work-today" title="დღეს" hint={`${day.contacts.length} კონტაქტი · ${day.tasks.length} დავალება`}>
-        <div className="split">
-          <div>
-            <h2 className="block-title">გადასარეკი</h2>
-            {day.contacts.length === 0 ? <p className="muted">დღეს გადასარეკი არ არის.</p> : (
-              <div className="results">
-                {day.contacts.map((customer) => (
-                  <Link key={customer.id} href={`/crm/customers/${customer.id}`}>
-                    {customer.name}
-                    <small>{customer.nextContactOn ? formatDateOnly(customer.nextContactOn) : ""}</small>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <h2 className="block-title">ვადა დღეს ან ვადის გარეშე</h2>
-            {day.tasks.length === 0 ? <p className="muted">ასეთი ღია დავალება არ არის.</p> : (
-              <div className="results">
-                {day.tasks.map((task) => (
-                  <Link key={task.id} href={task.customer ? `/crm/customers/${task.customer.id}` : "/work"}>
-                    {task.title}
-                    <small>{task.dueOn ? formatDateOnly(task.dueOn) : "ვადის გარეშე"}</small>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </Fold>
       <TaskBoard
         canMove={canWrite}
+        actions={form}
         tasks={tasks.map((task) => {
           const due = task.dueOn ? formatDateOnly(task.dueOn) : "";
           const status = task.status === "doing" || task.status === "done" || task.status === "cancelled" ? task.status : "open";
@@ -101,6 +85,36 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
           };
         })}
       />
+      <Fold id="work-today" title="დღეს" defaultOpen={false} hint={`${day.contacts.length} კონტაქტი · ${day.tasks.length} დავალება`}>
+        <div className="split">
+          <div>
+            <h2 className="block-title">გადასარეკი</h2>
+            {day.contacts.length === 0 ? <p className="muted">დღეს გადასარეკი არ არის.</p> : (
+              <div className="results">
+                {day.contacts.map((customer) => (
+                  <Link key={customer.id} href={`/crm/customers/${customer.id}`}>
+                    {customer.name}
+                    <small>{customer.nextContactOn ? formatDateOnly(customer.nextContactOn) : ""}</small>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <h2 className="block-title">ვადა დღეს ან ვადის გარეშე</h2>
+            {day.tasks.length === 0 ? <p className="muted">ასეთი ღია დავალება არ არის.</p> : (
+              <div className="results">
+                {day.tasks.map((task) => (
+                  <Link key={task.id} href={`/work/${task.id}`}>
+                    {task.title}
+                    <small>{task.dueOn ? formatDateOnly(task.dueOn) : "ვადის გარეშე"}</small>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </Fold>
     </section>
   );
 }

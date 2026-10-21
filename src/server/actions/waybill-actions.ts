@@ -123,6 +123,7 @@ export async function createSalesOrderAction(_prev: ActionState, formData: FormD
     const order = await createSalesOrder(actor, {
       customerId: String(formData.get("customerId") ?? ""),
       notes: String(formData.get("notes") ?? ""),
+      orderedOn: String(formData.get("orderedOn") ?? ""),
       postingKey: String(formData.get("postingKey") ?? ""),
       lines: parseLines(String(formData.get("lines") ?? "")),
     });
@@ -142,6 +143,7 @@ export async function updateOpenOrderAction(_prev: ActionState, formData: FormDa
     await updateOpenOrder(actor, orderId, {
       customerId: String(formData.get("customerId") ?? ""),
       notes: String(formData.get("notes") ?? ""),
+      orderedOn: String(formData.get("orderedOn") ?? ""),
       lines: parseLines(String(formData.get("lines") ?? "")),
     });
     revalidatePath(`/sales/orders/${orderId}`);

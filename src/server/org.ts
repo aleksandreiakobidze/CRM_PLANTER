@@ -1,5 +1,6 @@
 import type { Tx } from "@/server/db";
 import { PERMISSIONS, ROLE_PRESETS } from "@/server/auth/permissions";
+import { seedPlaceTerms } from "@/server/features/crm/place-terms";
 
 export const DEFAULT_LOCATIONS = [
   { code: "greenhouse", nameKa: "სათბური ნაფეტვრებში", kind: "greenhouse" },
@@ -71,6 +72,7 @@ export async function provisionOrganization(tx: Tx, organizationId: string): Pro
       create: { organizationId, provider, status: "not_configured" },
     });
   }
+  await seedPlaceTerms(tx, organizationId);
   const hall = await tx.resource.findFirst({ where: { organizationId, nameKa: "სათბურის დარბაზი" } });
   if (!hall) {
     await tx.resource.create({ data: { organizationId, nameKa: "სათბურის დარბაზი", capacity: 1 } });

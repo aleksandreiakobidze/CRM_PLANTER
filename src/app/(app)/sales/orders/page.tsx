@@ -4,13 +4,14 @@ import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
 import { orderStatusLabel } from "@/server/labels";
 import { D } from "@/server/money";
+import { formatDateOnly } from "@/server/time";
 
 export default async function OrdersPage() {
   const actor = await getActor();
   const orders = await getDb().salesOrder.findMany({
     where: { organizationId: actor.organizationId },
     include: { customer: true, lines: true },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ orderedOn: "desc" }, { createdAt: "desc" }],
   });
   return (
     <section className="grid">
@@ -25,6 +26,7 @@ export default async function OrdersPage() {
         empty="შეკვეთა ჯერ არ არის."
         columns={[
           { key: "number", header: "ნომერი" },
+          { key: "date", header: "თარიღი" },
           { key: "customer", header: "კლიენტი" },
           { key: "status", header: "სტატუსი" },
           { key: "total", header: "ჯამი" },
@@ -33,6 +35,7 @@ export default async function OrdersPage() {
           id: order.id,
           cells: {
             number: <Link href={`/sales/orders/${order.id}`}>{order.number}</Link>,
+            date: formatDateOnly(order.orderedOn),
             customer: order.customer.name,
             status: orderStatusLabel(order.status),
             total: `${order.lines.reduce((sum, line) => sum.plus(D(line.lineTotal)), D(0)).toFixed(2)} ₾`,

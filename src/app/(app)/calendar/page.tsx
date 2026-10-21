@@ -35,7 +35,7 @@ function taskChip(task: {
       people,
     ].filter(Boolean),
     files: task.attachments.map((file) => ({ id: file.id, name: file.fileName })),
-    href: task.customer ? `/crm/customers/${task.customer.id}` : "/work",
+    href: `/work/${task.id}`,
     hrefLabel: task.customer ? "კლიენტის ბარათი" : "დაფა",
   };
 }

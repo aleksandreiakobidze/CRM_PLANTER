@@ -6,6 +6,7 @@ import { BusinessError } from "@/server/errors";
 import { normalizePhone, primaryPhone } from "@/server/phone";
 import { parseDateOnly, tbilisiDateString } from "@/server/time";
 import { prepareTaskFiles, readTaskBytes, removeTaskFiles, writeTaskFiles } from "@/server/features/crm/task-files";
+import { ensurePlaceTerms } from "@/server/features/crm/place-terms";
 import { withTx } from "@/server/tx";
 
 const STATUSES = new Set(["fresh", "to_contact", "quote_sent", "customer", "declined"]);
@@ -122,6 +123,12 @@ export async function createCustomer(
         ownerId: actor.userId,
       },
     });
+    await ensurePlaceTerms(tx, actor.organizationId, [
+      { kind: "region", name: customer.region },
+      { kind: "city", name: customer.city },
+      { kind: "district", name: customer.district },
+      { kind: "venue_type", name: customer.venueType },
+    ]);
     await audit(tx, actor, "customer.create", "customer", customer.id, undefined, { name: customer.name });
     return customer;
   });
@@ -198,6 +205,12 @@ export async function updateCustomer(
         nextContactOn: input.nextContactOn ? parseDateOnly(input.nextContactOn) : null,
       },
     });
+    await ensurePlaceTerms(tx, actor.organizationId, [
+      { kind: "region", name: customer.region },
+      { kind: "city", name: customer.city },
+      { kind: "district", name: customer.district },
+      { kind: "venue_type", name: customer.venueType },
+    ]);
     await audit(tx, actor, "customer.update", "customer", customer.id, { name: existing.name }, { name: customer.name });
     return customer;
   });
@@ -236,16 +249,24 @@ export async function addAddress(actor: Actor, input: { customerId: string; labe
   if (!line1) throw new BusinessError("ქუჩა სავალდებულოა", "validation");
   const customer = await getDb().customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
   if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
-  return getDb().address.create({
-    data: {
-      organizationId: actor.organizationId,
-      customerId: customer.id,
-      label: input.label?.trim() || "მთავარი",
-      line1,
-      city: input.city?.trim() || null,
-      region: input.region?.trim() || null,
-      district: input.district?.trim() || null,
-    },
+  return withTx(async (tx) => {
+    const address = await tx.address.create({
+      data: {
+        organizationId: actor.organizationId,
+        customerId: customer.id,
+        label: input.label?.trim() || "მთავარი",
+        line1,
+        city: input.city?.trim() || null,
+        region: input.region?.trim() || null,
+        district: input.district?.trim() || null,
+      },
+    });
+    await ensurePlaceTerms(tx, actor.organizationId, [
+      { kind: "city", name: address.city },
+      { kind: "region", name: address.region },
+      { kind: "district", name: address.district },
+    ]);
+    return address;
   });
 }
 
@@ -351,6 +372,20 @@ export async function listTasks(actor: Actor, scope: "mine" | "all" = "mine") {
   });
 }
 
+export async function getTask(actor: Actor, taskId: string) {
+  const task = await getDb().task.findFirst({
+    where: { id: taskId, organizationId: actor.organizationId },
+    include: taskInclude,
+  });
+  if (!task) throw new BusinessError("დავალება ვერ მოიძებნა", "not_found");
+  const assigned = task.assignments.some((item) => item.userId === actor.userId);
+  const author = task.createdById === actor.userId;
+  if (!assigned && !author && !actor.permissions.has("task.read.all")) {
+    throw new BusinessError("ამ დავალების ნახვის უფლება არ გაქვთ", "forbidden");
+  }
+  return task;
+}
+
 export async function setTaskStatus(actor: Actor, taskId: string, status: string) {
   requirePermission(actor, "crm.write");
   if (!TASK_STATUSES.has(status)) throw new BusinessError("დავალების სტატუსი არასწორია", "validation");
@@ -448,6 +483,7 @@ async function moveCustomerGraph(tx: Tx, actor: Actor, targetId: string, sourceI
   await tx.address.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
   await tx.activity.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
   await tx.task.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
+  await tx.customerAttachment.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
   await tx.quote.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
   await tx.salesOrder.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });
   await tx.invoice.updateMany({ where: { customerId: sourceId }, data: { customerId: targetId } });

@@ -68,6 +68,8 @@ model Organization {
   activities        Activity[]
   tasks             Task[]
   taskAttachments   TaskAttachment[]
+  customerAttachments CustomerAttachment[]
+  placeTerms         PlaceTerm[]
   customerPlants     CustomerPlant[]
   replacementCases   ReplacementCase[]
   suppliers          Supplier[]
@@ -85,6 +87,7 @@ model Organization {
   bankImportBatches  BankImportBatch[]
   portalAccounts     CustomerPortalAccount[]
   internalShipments  InternalShipment[]
+  chatThreads        ChatThread[]
 
   @@map("organizations")
 }
@@ -104,9 +107,12 @@ model User {
   createdTasks    Task[]           @relation("TaskCreator")
   taskAssignments TaskAssignment[]
   taskUploads     TaskAttachment[] @relation("TaskUploader")
+  customerUploads CustomerAttachment[] @relation("CustomerUploader")
   invitations     Invitation[]     @relation("InvitationCreator")
   deliveryTasks   DeliveryTask[]   @relation("DeliveryDriver")
   routes          Route[]          @relation("RouteDriver")
+  chatJoins       ChatParticipant[]
+  chatMessages    ChatMessage[]     @relation("ChatAuthor")
 
   @@map("users")
 }
@@ -262,6 +268,7 @@ model Customer {
   eventBookings    EventBooking[]
   bankImportRows   BankImportRow[]
   portalAccounts   CustomerPortalAccount[]
+  files            CustomerAttachment[]
 
   @@index([organizationId, relationshipStatus])
   @@index([organizationId, phoneNormalized])
@@ -384,6 +391,40 @@ model TaskAttachment {
 
   @@index([organizationId, taskId])
   @@map("task_attachments")
+}
+
+model CustomerAttachment {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  customerId     String   @map("customer_id")
+  kind           String
+  fileName       String   @map("file_name")
+  contentType    String   @map("content_type")
+  byteSize       Int      @map("byte_size")
+  storageKey     String   @unique @map("storage_key")
+  uploadedById   String   @map("uploaded_by_id")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  uploadedBy   User         @relation("CustomerUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, customerId, kind])
+  @@map("customer_attachments")
+}
+
+model PlaceTerm {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  kind           String
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, kind, name])
+  @@index([organizationId, kind])
+  @@map("place_terms")
 }
 
 model SavedView {
@@ -602,6 +643,7 @@ model Quote {
 model QuoteLine {
   id             String  @id @default(cuid())
   quoteId        String  @map("quote_id")
+  kind           String  @default("item")
   variantId      String? @map("variant_id")
   description    String
   quantity       Decimal @db.Decimal(18, 3)
@@ -627,6 +669,7 @@ model SalesOrder {
   postingKey     String   @unique @map("posting_key")
   currency       String   @default("GEL")
   notes          String?
+  orderedOn      DateTime @default(now()) @map("ordered_on") @db.Date
   version        Int      @default(0)
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -645,7 +688,8 @@ model SalesOrder {
 model SalesOrderLine {
   id             String  @id @default(cuid())
   orderId        String  @map("order_id")
-  variantId      String  @map("variant_id")
+  kind           String  @default("item")
+  variantId      String? @map("variant_id")
   locationId     String  @map("location_id")
   description    String
   quantity       Decimal @db.Decimal(18, 3)
@@ -1676,4 +1720,47 @@ model CustomerPortalAccount {
 
   @@unique([organizationId, email])
   @@map("customer_portal_accounts")
+}
+
+model ChatThread {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  kind           String
+  pairKey        String?  @map("pair_key")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@unique([organizationId, pairKey])
+  @@index([organizationId, kind])
+  @@map("chat_threads")
+}
+
+model ChatParticipant {
+  threadId   String   @map("thread_id")
+  userId     String   @map("user_id")
+  lastReadAt DateTime @default(now()) @map("last_read_at") @db.Timestamptz(6)
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([threadId, userId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  threadId  String   @map("thread_id")
+  authorId  String   @map("author_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User       @relation("ChatAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([threadId, createdAt])
+  @@map("chat_messages")
 }

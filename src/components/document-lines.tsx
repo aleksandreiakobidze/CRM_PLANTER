@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { D } from "@/server/money";
+import { LINE_KIND_LABEL, SERVICE_KINDS, type LineKind } from "@/server/features/sales/line-kinds";
 
 export type DocumentLineMode = "sale" | "rental" | "stock";
 
@@ -13,7 +14,9 @@ export type CatalogItem = {
 
 type Row = {
   key: string;
+  kind: LineKind;
   itemId: string;
+  description: string;
   quantity: string;
   unitPrice: string;
   discountAmount: string;
@@ -34,15 +37,36 @@ export function DocumentLines({
   name?: string;
   mode: DocumentLineMode;
   options: CatalogItem[];
-  initial?: { itemId: string; quantity: string; unitPrice: string; discountAmount: string }[];
+  initial?: { kind?: LineKind; itemId: string; description?: string; quantity: string; unitPrice: string; discountAmount: string }[];
 }) {
+  const allowServices = mode === "sale";
   const [rows, setRows] = useState<Row[]>(() =>
-    initial?.length ? initial.map((row) => ({ ...row, key: crypto.randomUUID() })) : [],
+    initial?.length
+      ? initial.map((row) => ({
+          kind: row.kind ?? "item",
+          itemId: row.itemId,
+          description: row.description ?? "",
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          discountAmount: row.discountAmount,
+          key: crypto.randomUUID(),
+        }))
+      : [],
   );
   const [picking, setPicking] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const payload = useMemo(
-    () => JSON.stringify(rows.map(({ itemId, quantity, unitPrice, discountAmount }) => ({ itemId, quantity, unitPrice, discountAmount }))),
+    () =>
+      JSON.stringify(
+        rows.map(({ kind, itemId, description, quantity, unitPrice, discountAmount }) => ({
+          kind,
+          itemId,
+          description,
+          quantity,
+          unitPrice,
+          discountAmount,
+        })),
+      ),
     [rows],
   );
   const total = rows.reduce((sum, row) => {
@@ -54,7 +78,8 @@ export function DocumentLines({
     return sum.plus(quantity.mul(price).minus(discount));
   }, D(0));
   const addLabel = mode === "rental" ? "მცენარის დამატება" : "აითემის დამატება";
-  const itemHeader = mode === "rental" ? "მცენარე" : "აითემი";
+  const itemHeader = mode === "rental" ? "მცენარე" : "დასახელება";
+  const emptyText = mode === "rental" ? "მცენარე ჯერ არ არის არჩეული." : "ხაზი ჯერ არ არის არჩეული.";
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ka");
     if (!needle) return options;
@@ -70,11 +95,32 @@ export function DocumentLines({
     if (picking === "new") {
       setRows((current) => [
         ...current,
-        { key: crypto.randomUUID(), itemId: item.value, quantity: "1", unitPrice: price, discountAmount: "0" },
+        { key: crypto.randomUUID(), kind: "item", itemId: item.value, description: item.label, quantity: "1", unitPrice: price, discountAmount: "0" },
       ]);
     } else if (picking) {
-      setRows((current) => current.map((row) => (row.key === picking ? { ...row, itemId: item.value, unitPrice: price || row.unitPrice } : row)));
+      setRows((current) =>
+        current.map((row) =>
+          row.key === picking ? { ...row, kind: "item", itemId: item.value, description: item.label, unitPrice: price || row.unitPrice } : row,
+        ),
+      );
     }
+    setPicking(null);
+    setQuery("");
+  }
+
+  function addService(kind: LineKind) {
+    setRows((current) => [
+      ...current,
+      {
+        key: crypto.randomUUID(),
+        kind,
+        itemId: "",
+        description: LINE_KIND_LABEL[kind],
+        quantity: "1",
+        unitPrice: "",
+        discountAmount: "0",
+      },
+    ]);
     setPicking(null);
     setQuery("");
   }
@@ -82,7 +128,7 @@ export function DocumentLines({
   return (
     <div className="lines">
       <input type="hidden" name={name} value={payload} />
-      {rows.length === 0 ? <p className="muted">{mode === "rental" ? "მცენარე ჯერ არ არის არჩეული." : "აითემი ჯერ არ არის არჩეული."}</p> : (
+      {rows.length === 0 ? <p className="muted">{emptyText}</p> : (
         <table>
           <thead>
             <tr>
@@ -96,14 +142,29 @@ export function DocumentLines({
           <tbody>
             {rows.map((row) => {
               const item = options.find((option) => option.value === row.itemId);
+              const service = row.kind !== "item";
               return (
                 <tr key={row.key}>
                   <td>
                     <div className="line-item">
-                      <strong>{item?.label ?? "აითემი კატალოგში აღარ არის"}</strong>
-                      <button type="button" className="secondary" onClick={() => { setPicking(row.key); setQuery(""); }}>
-                        შეცვლა
-                      </button>
+                      <div className="line-item-head">
+                        <span className="line-kind">{LINE_KIND_LABEL[row.kind]}</span>
+                        {service ? null : (
+                          <button type="button" className="secondary" onClick={() => { setPicking(row.key); setQuery(""); }}>
+                            შეცვლა
+                          </button>
+                        )}
+                      </div>
+                      {service ? (
+                        <input
+                          aria-label={LINE_KIND_LABEL[row.kind]}
+                          value={row.description}
+                          onChange={(event) => patch(row.key, { description: event.target.value })}
+                          required
+                        />
+                      ) : (
+                        <strong>{item?.label ?? row.description ?? "აითემი კატალოგში აღარ არის"}</strong>
+                      )}
                     </div>
                   </td>
                   {mode === "rental" ? null : (
@@ -117,7 +178,7 @@ export function DocumentLines({
                         aria-label={mode === "rental" ? "ფასი" : "ერთეულის ფასი"}
                         value={row.unitPrice}
                         onChange={(event) => patch(row.key, { unitPrice: event.target.value })}
-                        required={mode === "rental"}
+                        required={mode === "rental" || service}
                       />
                     </td>
                   )}
@@ -138,24 +199,33 @@ export function DocumentLines({
         </table>
       )}
       <div className="line-actions">
-        <button
-          type="button"
-          className="secondary"
-          aria-expanded={picking === "new"}
-          onClick={() => {
-            setPicking((current) => (current === "new" ? null : "new"));
-            setQuery("");
-          }}
-        >
-          {addLabel}
-        </button>
+        <div className="line-adders">
+          <button
+            type="button"
+            className="secondary"
+            aria-expanded={picking === "new"}
+            onClick={() => {
+              setPicking((current) => (current === "new" ? null : "new"));
+              setQuery("");
+            }}
+          >
+            {addLabel}
+          </button>
+          {allowServices
+            ? SERVICE_KINDS.map((kind) => (
+                <button key={kind} type="button" className="secondary" onClick={() => addService(kind)}>
+                  {LINE_KIND_LABEL[kind]}
+                </button>
+              ))
+            : null}
+        </div>
         {mode === "stock" ? null : <p className="doc-total">ჯამი: {total.toFixed(2)} ₾</p>}
       </div>
       {picking ? (
         <div className="item-picker">
           <label>
             ძებნა
-            <input aria-label="აითემის ძებნა" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="სახელი ან SKU" />
+            <input aria-label="ძებნა" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="SKU" />
           </label>
           <ul>
             {visible.length === 0 ? <li className="combo-empty">ვერ მოიძებნა</li> : visible.map((item) => (

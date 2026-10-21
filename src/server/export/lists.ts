@@ -1,5 +1,5 @@
 import type { Actor } from "@/server/auth/permissions";
-import { can } from "@/server/auth/permissions";
+import { can, requirePermission } from "@/server/auth/permissions";
 import { contains, getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListParams } from "@/server/features/crm/customer-list";
@@ -97,7 +97,7 @@ async function file(title: string, fallback: string, sheets: SheetSpec[], note?:
 
 export async function customersWorkbook(actor: Actor, params: CustomerListParams): Promise<ExportFile> {
   const options = await customerFilterOptions(actor.organizationId);
-  const filters = customerListFilters(params, options.types, options.zones);
+  const filters = customerListFilters(params, options.types, options.zones, options.cities, options.regions);
   const customers = await getDb().customer.findMany({
     where: customerListWhere(actor.organizationId, filters),
     include: { addresses: { orderBy: { line1: "asc" } } },
@@ -426,9 +426,11 @@ export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
 }
 
 export async function reportsWorkbook(actor: Actor, fromIso: string, toIso: string): Promise<ExportFile> {
+  requirePermission(actor, "reports.sales.read");
   const from = fromIso || "2026-01-01";
   const to = toIso || from;
   const data = await opsDashboard(actor, from, to);
+  if (!data.sales) throw new BusinessError("გაყიდვების რეპორტი ამ როლს არ ეჩვენება", "forbidden");
   return file("რეპორტები", "reports", [
     {
       name: "KPI",

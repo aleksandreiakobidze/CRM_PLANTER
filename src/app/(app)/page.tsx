@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Fold } from "@/components/fold";
 import { ShortcutGrid } from "@/components/shortcut-grid";
+import { canSeeSalesTotals } from "@/server/auth/permissions";
 import { getActor } from "@/server/auth/session";
 import { myDay } from "@/server/features/crm/customer-service";
 import { salesDashboard } from "@/server/features/reports/dashboard-service";
@@ -30,7 +31,7 @@ export default async function HomePage() {
   const month = today.slice(0, 7);
   const bounds = periodBounds(month);
   const [data, day] = await Promise.all([
-    actor.permissions.has("reports.read") ? salesDashboard(actor, bounds.start, bounds.end) : Promise.resolve(null),
+    canSeeSalesTotals(actor) ? salesDashboard(actor, bounds.start, bounds.end) : Promise.resolve(null),
     myDay(actor),
   ]);
   const monthName = MONTHS[Number(month.slice(5)) - 1];
@@ -70,7 +71,7 @@ export default async function HomePage() {
           {day.tasks.length === 0 ? <p className="muted">ვადიანი ღია დავალება არ გაქვს.</p> : (
             <div className="results">
               {day.tasks.slice(0, 6).map((task) => (
-                <Link key={task.id} href="/work">
+                <Link key={task.id} href={`/work/${task.id}`}>
                   {task.title}
                   <small>{task.customer?.name ?? "კლიენტის გარეშე"}</small>
                 </Link>
@@ -84,9 +85,11 @@ export default async function HomePage() {
         <h2 className="block-title">სწრაფი გზა</h2>
         <ShortcutGrid items={SHORTCUTS} />
       </section>
+      {data ? (
       <Fold id="home-numbers" title="რას ნიშნავს ეს რიცხვები" defaultOpen={false}>
         <p>გაყიდული, დარიცხული და შემოსული ცალ-ცალკეა. დეპოზიტი არც ერთში არ შედის. მარჟა საოპერაციო ხარჯამდეა.</p>
       </Fold>
+      ) : null}
     </section>
   );
 }

@@ -15,7 +15,7 @@ export default async function NewQuotePage() {
       <div className="page-head">
         <Link className="back" href="/sales/quotes">შეთავაზებები</Link>
         <h1>ახალი შეთავაზება</h1>
-        <p>შენახვა ნაშთს არ ჩამოწერს და არ ჯავშნის. აითემი კატალოგიდან ირჩევა.</p>
+        <p>შენახვა ნაშთს არ ჩამოწერს. შეიძლება აითემი, ექსკურსია, გამწვანება, გადარგვა, მოვლა ან სხვა სერვისი.</p>
       </div>
       <div className="card doc-card">
         <HeaderLinesForm

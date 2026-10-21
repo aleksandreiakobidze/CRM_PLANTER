@@ -1,8 +1,8 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 export type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
-function glyph({ size = 18, className, ...props }: IconProps, path: string) {
+function frame({ size = 18, className, children, ...props }: IconProps & { children: ReactNode }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -18,9 +18,13 @@ function glyph({ size = 18, className, ...props }: IconProps, path: string) {
       aria-hidden
       {...props}
     >
-      <path d={path} />
+      {children}
     </svg>
   );
+}
+
+function glyph(props: IconProps, path: string) {
+  return frame({ ...props, children: <path d={path} /> });
 }
 
 export function Home(props: IconProps) {
@@ -107,6 +111,35 @@ export function Megaphone(props: IconProps) {
 export function Trees(props: IconProps) {
   return glyph(props, "M10 21v-4M7 21h6M10 17 5 10h4L6 4h8l-3 6h4zM17 21v-3M15 21h4M17 18l-3-5h3l-2-5h6l-2 5h3z");
 }
+export function Paperclip(props: IconProps) {
+  return glyph(props, "m21.4 11.1-9.2 9.2a6 6 0 1 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7L9.4 17.4a2 2 0 1 1-2.8-2.8l8.5-8.5");
+}
+export function Plus(props: IconProps) {
+  return glyph(props, "M12 5v14M5 12h14");
+}
+export function Clock(props: IconProps) {
+  return glyph(props, "M12 8v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z");
+}
+export function Sun(props: IconProps) {
+  return frame({
+    ...props,
+    children: (
+      <>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+      </>
+    ),
+  });
+}
+export function Moon(props: IconProps) {
+  return glyph(props, "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z");
+}
 export function PartyPopper(props: IconProps) {
   return glyph(props, "M5.8 11.3 2 22l10.7-3.8M4 3h.01M22 8h.01M15 2h.01M22 20h.01M22 2l-2.24.75a2.9 8.7 0 0 0-1.01 8.7L11 13.5");
+}
+export function MessageCircle(props: IconProps) {
+  return glyph(props, "M7.9 20A9 9 0 1 0 4 16.1L2 22z");
+}
+export function Send(props: IconProps) {
+  return glyph(props, "m22 2-7 20-4-9-9-4zM22 2 11 13");
 }

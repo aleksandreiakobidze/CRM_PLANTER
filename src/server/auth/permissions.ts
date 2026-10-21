@@ -21,6 +21,7 @@ export const PERMISSIONS = [
   "import.run",
   "admin.users",
   "reports.read",
+  "reports.sales.read",
   "task.read.all",
   "purchase.write",
   "delivery.read",
@@ -29,8 +30,31 @@ export const PERMISSIONS = [
 
 export type PermissionCode = (typeof PERMISSIONS)[number];
 
+const MANAGER_PERMISSIONS: PermissionCode[] = [
+  "crm.read",
+  "crm.write",
+  "catalog.read",
+  "sales.read",
+  "sales.write",
+  "stock.read",
+  "stock.write",
+  "rental.read",
+  "rental.write",
+  "maintenance.read",
+  "maintenance.write",
+  "excursion.read",
+  "excursion.write",
+  "reports.read",
+  "task.read.all",
+  "purchase.write",
+  "delivery.read",
+  "delivery.write",
+];
+
 export const ROLE_PRESETS: Record<string, { nameKa: string; permissions: PermissionCode[] }> = {
   owner: { nameKa: "ადმინისტრატორი", permissions: [...PERMISSIONS] },
+  admin: { nameKa: "ადმინი", permissions: [...PERMISSIONS] },
+  manager: { nameKa: "მენეჯერი", permissions: MANAGER_PERMISSIONS },
   sales_manager: {
     nameKa: "გაყიდვების მენეჯერი",
     permissions: ["crm.read", "crm.write", "catalog.read", "sales.read", "sales.write", "stock.read", "reports.read", "task.read.all"],
@@ -83,4 +107,8 @@ export function requirePermission(actor: Actor, permission: PermissionCode): voi
 
 export function can(actor: Actor, permission: PermissionCode): boolean {
   return actor.permissions.has(permission);
+}
+
+export function canSeeSalesTotals(actor: Actor): boolean {
+  return actor.permissions.has("reports.sales.read");
 }

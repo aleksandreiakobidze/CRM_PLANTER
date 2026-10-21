@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getActor } from "@/server/auth/session";
 import { createVariant } from "@/server/features/catalog/catalog-service";
+import { addCustomerFiles, deleteCustomerFile } from "@/server/features/crm/customer-files";
+import { addPlaceTerm, deletePlaceTerm } from "@/server/features/crm/place-terms";
+import { setMemberRole } from "@/server/features/admin/team-service";
 import { addActivity, addAddress, addContact, cancelTask, completeAssignment, createCustomer, createTask, reopenTask, rescheduleTask, setTaskStatus, updateCustomer } from "@/server/features/crm/customer-service";
 import { bookExcursion, completeExcursion } from "@/server/features/excursions/excursion-service";
 import { createInvoiceFromOrder, createInvoiceFromRental } from "@/server/features/finance/invoice-service";
@@ -98,6 +101,27 @@ export async function updateCustomerAction(customerId: string, _prev: ActionStat
   }
 }
 
+export async function addPlaceTermAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    await addPlaceTerm(actor, String(formData.get("kind") ?? ""), String(formData.get("name") ?? ""));
+    revalidatePath("/settings");
+    revalidatePath("/crm/customers");
+    revalidatePath("/crm/customers/new");
+    return done("ჩანაწერი დაემატა");
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function deletePlaceTermAction(id: string) {
+  const actor = await getActor();
+  await deletePlaceTerm(actor, id);
+  revalidatePath("/settings");
+  revalidatePath("/crm/customers");
+  revalidatePath("/crm/customers/new");
+}
+
 export async function addContactAction(customerId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
@@ -132,6 +156,32 @@ export async function addAddressAction(customerId: string, _prev: ActionState, f
   } catch (error) {
     return { ok: false, message: publicMessage(error) };
   }
+}
+
+async function uploadedFiles(formData: FormData) {
+  return Promise.all(
+    formData.getAll("files").flatMap((entry) => {
+      if (!(entry instanceof File) || entry.size === 0) return [];
+      return [entry.arrayBuffer().then((buffer) => ({ name: entry.name, bytes: Buffer.from(buffer) }))];
+    }),
+  );
+}
+
+export async function addCustomerFilesAction(customerId: string, kind: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    await addCustomerFiles(actor, { customerId, kind, files: await uploadedFiles(formData) });
+    revalidatePath(`/crm/customers/${customerId}`);
+    return done(kind === "contract" ? "ხელშეკრულება აიტვირთა" : "სურათი აიტვირთა");
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function deleteCustomerFileAction(customerId: string, fileId: string) {
+  const actor = await getActor();
+  await deleteCustomerFile(actor, fileId);
+  revalidatePath(`/crm/customers/${customerId}`);
 }
 
 export async function addActivityAction(customerId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -171,8 +221,9 @@ export async function createTaskAction(_prev: ActionState, formData: FormData): 
   }
 }
 
-async function refreshTask(task: { customerId: string | null }) {
+async function refreshTask(task: { id: string; customerId: string | null }) {
   revalidatePath("/work");
+  revalidatePath(`/work/${task.id}`);
   revalidatePath("/calendar");
   if (task.customerId) revalidatePath(`/crm/customers/${task.customerId}`);
 }
@@ -526,6 +577,19 @@ export async function saveOrganizationAction(_prev: ActionState, formData: FormD
     });
     revalidatePath("/settings");
     return done("რეკვიზიტები შენახულია");
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function setMemberRoleAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    await setMemberRole(actor, String(formData.get("membershipId") ?? ""), String(formData.get("roleId") ?? ""));
+    revalidatePath("/settings");
+    revalidatePath("/");
+    revalidatePath("/reports");
+    return done("როლი შენახულია");
   } catch (error) {
     return { ok: false, message: publicMessage(error) };
   }

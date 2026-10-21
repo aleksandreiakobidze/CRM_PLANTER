@@ -6,10 +6,22 @@ import { BusinessError, isUniqueViolation } from "@/server/errors";
 import { consumeReservation, releaseReservation, reserveQuantity } from "@/server/features/inventory/stock-service";
 import { D, Decimal, lineAmount } from "@/server/money";
 import { nextNumber } from "@/server/numbers";
+import { isLineKind, isStockLine, LINE_KIND_LABEL, type LineKind } from "@/server/features/sales/line-kinds";
+import { parseDateOnly, tbilisiDateString } from "@/server/time";
 import { withTx } from "@/server/tx";
 
+function orderDate(value?: string) {
+  const iso = value?.trim() || tbilisiDateString();
+  try {
+    return parseDateOnly(iso);
+  } catch {
+    throw new BusinessError("თარიღის ფორმატი უნდა იყოს YYYY-MM-DD", "validation");
+  }
+}
+
 export type DraftLine = {
-  variantId: string;
+  kind?: LineKind;
+  variantId?: string;
   quantity: string;
   unitPrice?: string;
   discountAmount?: string;
@@ -29,13 +41,24 @@ export function parseDocumentLines(raw: string): DraftLine[] {
   }
   if (!Array.isArray(parsed) || parsed.length === 0) throw new BusinessError("ერთი ხაზი მაინც სჭირდება", "validation");
   return parsed.map((row) => {
-    const item = row as { itemId?: string; variantId?: string; quantity?: string; unitPrice?: string; discountAmount?: string };
+    const item = row as {
+      kind?: string;
+      itemId?: string;
+      variantId?: string;
+      quantity?: string;
+      unitPrice?: string;
+      discountAmount?: string;
+      description?: string;
+    };
     const unitPrice = String(item.unitPrice ?? "").trim();
+    const kind = isLineKind(String(item.kind ?? "item")) ? (item.kind as LineKind) : "item";
     return {
+      kind,
       variantId: String(item.itemId || item.variantId || ""),
       quantity: String(item.quantity || "1"),
       unitPrice: unitPrice || undefined,
       discountAmount: String(item.discountAmount || "0"),
+      description: String(item.description ?? "").trim() || undefined,
     };
   });
 }
@@ -45,11 +68,28 @@ async function prepareLines(tx: Tx, organizationId: string, lines: DraftLine[]) 
   for (const line of lines) {
     const quantity = D(line.quantity);
     if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
+    const kind = line.kind && isLineKind(line.kind) ? line.kind : "item";
+    const discount = D(line.discountAmount ?? "0");
+    if (!isStockLine(kind)) {
+      if (!line.unitPrice) throw new BusinessError("სერვისის ხაზს ფასი სჭირდება", "validation");
+      const unitPrice = D(line.unitPrice);
+      const description = line.description?.trim() || LINE_KIND_LABEL[kind];
+      prepared.push({
+        kind,
+        variantId: null,
+        description,
+        quantity: quantity.toFixed(3),
+        unitPrice: unitPrice.toFixed(4),
+        discountAmount: discount.toFixed(2),
+        lineTotal: lineAmount(quantity, unitPrice, discount).toFixed(2),
+      });
+      continue;
+    }
     const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId } });
     if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
     const unitPrice = line.unitPrice ? D(line.unitPrice) : await resolveUnitPrice(tx, organizationId, variant.id, quantity);
-    const discount = D(line.discountAmount ?? "0");
     prepared.push({
+      kind,
       variantId: variant.id,
       description: line.description || variant.nameKa,
       quantity: quantity.toFixed(3),
@@ -127,7 +167,9 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
     include: { lines: true },
   });
   if (!quote) throw new BusinessError("შეთავაზება ვერ მოიძებნა", "not_found");
-  if (quote.lines.some((line) => !line.variantId)) throw new BusinessError("შეთავაზების ხაზს ვარიანტი აკლია", "validation");
+  if (quote.lines.some((line) => isStockLine(line.kind) && !line.variantId)) {
+    throw new BusinessError("შეთავაზების აითემს ვარიანტი აკლია", "validation");
+  }
   const location = await salesLocation(tx, actor.organizationId);
   const number = await nextNumber(tx, actor.organizationId, "sales_order", "SO");
   const order = await tx.salesOrder.create({
@@ -137,9 +179,11 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
       customerId: quote.customerId,
       quoteId: quote.id,
       postingKey: `order-from-quote:${quote.id}`,
+      orderedOn: orderDate(),
       lines: {
         create: quote.lines.map((line) => ({
-          variantId: line.variantId!,
+          kind: line.kind,
+          variantId: line.variantId,
           locationId: location.id,
           description: line.description,
           quantity: line.quantity,
@@ -155,7 +199,7 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
   return order;
 }
 
-export async function createSalesOrder(actor: Actor, input: { customerId: string; notes?: string; postingKey: string; lines: DraftLine[] }) {
+export async function createSalesOrder(actor: Actor, input: { customerId: string; notes?: string; orderedOn?: string; postingKey: string; lines: DraftLine[] }) {
   requirePermission(actor, "sales.write");
   if (input.lines.length === 0) throw new BusinessError("შეკვეთას ერთი ხაზი მაინც სჭირდება", "validation");
   try {
@@ -168,7 +212,7 @@ export async function createSalesOrder(actor: Actor, input: { customerId: string
   }
 }
 
-async function createSalesOrderTx(tx: Tx, actor: Actor, input: { customerId: string; notes?: string; postingKey: string; lines: DraftLine[] }) {
+async function createSalesOrderTx(tx: Tx, actor: Actor, input: { customerId: string; notes?: string; orderedOn?: string; postingKey: string; lines: DraftLine[] }) {
   const existing = await tx.salesOrder.findUnique({ where: { postingKey: input.postingKey } });
   if (existing) return existing;
   const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
@@ -183,6 +227,7 @@ async function createSalesOrderTx(tx: Tx, actor: Actor, input: { customerId: str
       customerId: customer.id,
       status: "open",
       notes: input.notes,
+      orderedOn: orderDate(input.orderedOn),
       postingKey: input.postingKey,
       lines: {
         create: prepared.map((line) => ({ ...line, locationId: location.id })),
@@ -194,7 +239,7 @@ async function createSalesOrderTx(tx: Tx, actor: Actor, input: { customerId: str
   return order;
 }
 
-export async function updateOpenOrder(actor: Actor, orderId: string, input: { customerId: string; notes?: string; lines: DraftLine[] }) {
+export async function updateOpenOrder(actor: Actor, orderId: string, input: { customerId: string; notes?: string; orderedOn?: string; lines: DraftLine[] }) {
   requirePermission(actor, "sales.write");
   if (input.lines.length === 0) throw new BusinessError("შეკვეთას ერთი ხაზი მაინც სჭირდება", "validation");
   return withTx(async (tx) => {
@@ -214,6 +259,7 @@ export async function updateOpenOrder(actor: Actor, orderId: string, input: { cu
       data: {
         customerId: customer.id,
         notes: input.notes,
+        orderedOn: orderDate(input.orderedOn),
         version: { increment: 1 },
         lines: { create: prepared.map((line) => ({ ...line, locationId: location.id })) },
       },
@@ -242,11 +288,13 @@ async function confirmOrderTx(tx: Tx, actor: Actor, orderId: string) {
   if (!order) throw new BusinessError("შეკვეთა ვერ მოიძებნა", "not_found");
   if (AUTHORIZED.has(order.status) || STOCK_ISSUED.has(order.status)) return order;
   if (!OPEN.has(order.status)) throw new BusinessError("გაუქმებული შეკვეთა ვერ ჯავშნდება", "invalid_state");
-  const lines = [...order.lines].sort((a, b) => a.variantId.localeCompare(b.variantId) || a.locationId.localeCompare(b.locationId));
+  const lines = [...order.lines]
+    .filter((line) => isStockLine(line.kind) && line.variantId)
+    .sort((a, b) => a.variantId!.localeCompare(b.variantId!) || a.locationId.localeCompare(b.locationId));
   for (const line of lines) {
     await reserveQuantity(tx, {
       organizationId: actor.organizationId,
-      variantId: line.variantId,
+      variantId: line.variantId!,
       locationId: line.locationId,
       quantity: D(line.quantity),
       status: "confirmed",
@@ -314,6 +362,13 @@ async function fulfillOrderTx(tx: Tx, actor: Actor, orderId: string, postingKey:
   for (const line of order.lines) {
     const remaining = D(line.quantity).minus(line.fulfilledQty);
     if (remaining.lte(0)) continue;
+    if (!isStockLine(line.kind) || !line.variantId) {
+      await tx.salesOrderLine.update({
+        where: { id: line.id },
+        data: { fulfilledQty: D(line.fulfilledQty).plus(remaining).toFixed(3) },
+      });
+      continue;
+    }
     const reservation = await tx.reservation.findUnique({ where: { postingKey: `reserve:${order.id}:${line.id}` } });
     if (!reservation) throw new BusinessError("რეზერვი ვერ მოიძებნა", "not_found");
     const variant = await tx.productVariant.findUniqueOrThrow({ where: { id: line.variantId } });
@@ -393,6 +448,9 @@ async function returnSoldGoodsTx(
     const returnable = D(line.fulfilledQty).minus(line.returnedQty);
     if (quantity.lte(0) || quantity.gt(returnable)) {
       throw new BusinessError("დაბრუნება აღემატება დარჩენილ გაყიდულ რაოდენობას", "invalid_quantity");
+    }
+    if (!isStockLine(line.kind) || !line.variantId) {
+      throw new BusinessError("სერვისის ხაზი მარაგში არ ბრუნდება", "invalid_state");
     }
     const locationId = requested.condition === "damaged" ? quarantine.id : line.locationId;
     const variant = await tx.productVariant.findUniqueOrThrow({ where: { id: line.variantId } });

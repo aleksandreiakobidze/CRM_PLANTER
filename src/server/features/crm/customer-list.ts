@@ -1,11 +1,14 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { contains, getDb } from "@/server/db";
+import { listPlaceOptions, syncPlaceCatalog } from "@/server/features/crm/place-terms";
 
 export type CustomerListParams = {
   q?: string;
   status?: string;
   type?: string;
   zone?: string;
+  city?: string;
+  region?: string;
   priority?: string;
   phone?: string;
   web?: string;
@@ -17,6 +20,8 @@ export type CustomerListFilters = {
   status: string;
   type: string;
   zone: string;
+  city: string;
+  region: string;
   priority: string;
   phone: string;
   web: string;
@@ -32,34 +37,34 @@ function chosen(value: string | undefined, allowed: string[]) {
 export async function customerFilterOptions(organizationId: string) {
   const db = getDb();
   const base = { organizationId, mergedIntoId: null };
-  const [typeRows, zoneRows, total] = await Promise.all([
-    db.customer.findMany({
-      where: { ...base, venueType: { not: null } },
-      distinct: ["venueType"],
-      select: { venueType: true },
-      orderBy: { venueType: "asc" },
-    }),
-    db.customer.findMany({
-      where: { ...base, district: { not: null } },
-      distinct: ["district"],
-      select: { district: true },
-      orderBy: { district: "asc" },
-    }),
+  await syncPlaceCatalog(organizationId);
+  const [places, total] = await Promise.all([
+    listPlaceOptions(organizationId),
     db.customer.count({ where: base }),
   ]);
   return {
     total,
-    types: typeRows.map((row) => row.venueType).filter((value): value is string => Boolean(value)),
-    zones: zoneRows.map((row) => row.district).filter((value): value is string => Boolean(value)),
+    types: places.venue_type,
+    zones: places.district,
+    cities: places.city,
+    regions: places.region,
   };
 }
 
-export function customerListFilters(params: CustomerListParams, types: string[], zones: string[]): CustomerListFilters {
+export function customerListFilters(
+  params: CustomerListParams,
+  types: string[],
+  zones: string[],
+  cities: string[] = [],
+  regions: string[] = [],
+): CustomerListFilters {
   return {
     q: params.q?.trim() ?? "",
     status: chosen(params.status, STATUSES),
     type: chosen(params.type, types),
     zone: chosen(params.zone, zones),
+    city: chosen(params.city, cities),
+    region: chosen(params.region, regions),
     priority: chosen(params.priority, ["", "A", "B", "C"]),
     phone: chosen(params.phone, ["", "yes", "no"]),
     web: chosen(params.web, ["", "yes", "no"]),
@@ -74,6 +79,8 @@ export function customerListWhere(organizationId: string, filters: CustomerListF
     relationshipStatus: filters.status || undefined,
     venueType: filters.type || undefined,
     district: filters.zone || undefined,
+    city: filters.city || undefined,
+    region: filters.region || undefined,
     priority: filters.priority || undefined,
     ...(filters.phone === "yes" ? { phone: { not: null } } : {}),
     ...(filters.phone === "no" ? { phone: null } : {}),
@@ -89,6 +96,8 @@ export function customerListWhere(organizationId: string, filters: CustomerListF
             { phoneNormalized: contains(filters.q) },
             { venueType: contains(filters.q) },
             { district: contains(filters.q) },
+            { city: contains(filters.q) },
+            { region: contains(filters.q) },
             { website: contains(filters.q) },
             { addresses: { some: { line1: contains(filters.q) } } },
           ],

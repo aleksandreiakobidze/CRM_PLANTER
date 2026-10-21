@@ -11,8 +11,9 @@ import { completeSaleAction, retrySaleAction, updateOpenOrderAction } from "@/se
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
 import { orderStatusLabel } from "@/server/labels";
+import { isLineKind, isStockLine, LINE_KIND_LABEL } from "@/server/features/sales/line-kinds";
 import { D } from "@/server/money";
-import { tbilisiDateString } from "@/server/time";
+import { formatDateOnly, tbilisiDateString } from "@/server/time";
 
 function dateOnly(value: Date | null): string {
   if (!value) return "";
@@ -99,20 +100,29 @@ export default async function OrderPage({
               parties={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
               items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
               initialLines={order.lines.map((line) => ({
-                itemId: line.variantId,
+                kind: isLineKind(line.kind) ? line.kind : "item",
+                itemId: line.variantId ?? "",
+                description: line.description,
                 quantity: line.quantity.toString(),
                 unitPrice: line.unitPrice.toString(),
                 discountAmount: line.discountAmount.toString(),
               }))}
-              extra={<><input type="hidden" name="orderId" value={order.id} /><label>შენიშვნა<textarea name="notes" defaultValue={order.notes ?? ""} /></label></>}
+              extra={
+                <>
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <label>თარიღი<input name="orderedOn" type="date" required defaultValue={formatDateOnly(order.orderedOn)} /></label>
+                  <label>შენიშვნა<textarea name="notes" defaultValue={order.notes ?? ""} /></label>
+                </>
+              }
             />
           ) : (
             <>
               <table>
-                <thead><tr><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
+                <thead><tr><th>ტიპი</th><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
                 <tbody>
                   {order.lines.map((line) => (
                     <tr key={line.id}>
+                      <td>{isLineKind(line.kind) ? LINE_KIND_LABEL[line.kind] : line.kind}</td>
                       <td>{line.description}</td>
                       <td>{line.quantity.toString()}</td>
                       <td>{line.unitPrice.toString()}</td>
@@ -121,6 +131,7 @@ export default async function OrderPage({
                   ))}
                 </tbody>
               </table>
+              <p className="note">თარიღი: {formatDateOnly(order.orderedOn)}</p>
               {order.notes ? <p className="note">{order.notes}</p> : null}
             </>
           )}
@@ -179,7 +190,7 @@ export default async function OrderPage({
             <label>ხაზი
               <ComboBox
                 name="orderLineId"
-                options={order.lines.map((line) => ({
+                options={order.lines.filter((line) => isStockLine(line.kind) && line.variantId).map((line) => ({
                   value: line.id,
                   label: `${line.description} · დარჩა ${D(line.fulfilledQty).minus(line.returnedQty).toFixed(3)}`,
                 }))}

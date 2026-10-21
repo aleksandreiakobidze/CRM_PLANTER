@@ -5,7 +5,7 @@ import { D, Decimal, roundMoney } from "@/server/money";
 import { formatDateOnly, parseDateOnly } from "@/server/time";
 
 export async function salesDashboard(actor: Actor, fromIso: string, toIso: string) {
-  requirePermission(actor, "reports.read");
+  requirePermission(actor, "reports.sales.read");
   const from = parseDateOnly(fromIso);
   const to = parseDateOnly(toIso);
   const fulfillments = await getDb().fulfillment.findMany({

@@ -14,6 +14,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  MessageCircle,
   Package,
   PanelLeft,
   PartyPopper,
@@ -30,7 +31,9 @@ import {
   X,
 } from "@/components/icons";
 import { logoutAction } from "@/server/actions/auth-actions";
+import { MessengerDock } from "@/components/messenger";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CHAT_COPY } from "@/server/features/chat/chat-copy";
 
 const ICONS: Record<string, ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
   "/": Home,
@@ -54,6 +57,7 @@ const ICONS: Record<string, ComponentType<{ className?: string; "aria-hidden"?: 
   "/excursions": Bus,
   "/import": Upload,
   "/settings": Settings,
+  "/chat": MessageCircle,
 };
 
 const GROUPS: { title: string; links: [string, string][] }[] = [
@@ -63,6 +67,7 @@ const GROUPS: { title: string; links: [string, string][] }[] = [
       ["/", "მთავარი"],
       ["/work", "ჩემი სამუშაო"],
       ["/calendar", "კალენდარი"],
+      ["/chat", CHAT_COPY.chat],
     ],
   },
   {
@@ -224,7 +229,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <input name="q" type="search" placeholder="კლიენტი, ტელეფონი, SKU ან ინვოისი" aria-label="ძებნა" enterKeyHint="search" />
             <button type="submit">ძებნა</button>
           </form>
-          <ThemeToggle />
+          <div className="topbar-tools">
+            <MessengerDock />
+            <ThemeToggle />
+          </div>
         </header>
         <main className="main" id="main">{children}</main>
       </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { convertQuoteAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { LINE_KIND_LABEL, isLineKind } from "@/server/features/sales/line-kinds";
 import { D } from "@/server/money";
 
 export default async function QuotePage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,10 +24,16 @@ export default async function QuotePage({ params }: { params: Promise<{ id: stri
       </div>
       <div className="card">
         <table>
-          <thead><tr><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
+          <thead><tr><th>ტიპი</th><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
           <tbody>
             {quote.lines.map((line) => (
-              <tr key={line.id}><td>{line.description}</td><td>{line.quantity.toString()}</td><td>{line.unitPrice.toString()}</td><td>{line.lineTotal.toString()}</td></tr>
+              <tr key={line.id}>
+                <td>{isLineKind(line.kind) ? LINE_KIND_LABEL[line.kind] : line.kind}</td>
+                <td>{line.description}</td>
+                <td>{line.quantity.toString()}</td>
+                <td>{line.unitPrice.toString()}</td>
+                <td>{line.lineTotal.toString()}</td>
+              </tr>
             ))}
           </tbody>
         </table>
