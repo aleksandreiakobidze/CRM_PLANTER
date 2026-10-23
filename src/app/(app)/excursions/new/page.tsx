@@ -19,8 +19,8 @@ export default async function NewExcursionPage() {
         <label>სკოლა<ComboBox name="customerId" options={customers.map(customerOption)} /></label>
         <label>სივრცე<ComboBox name="resourceId" options={resources.map((resource) => ({ value: resource.id, label: resource.nameKa }))} /></label>
         <label>თარიღი<input name="date" type="date" required /></label>
-        <label>დაწყება<input name="startTime" defaultValue="13:00" /></label>
-        <label>დასრულება<input name="endTime" defaultValue="15:00" /></label>
+        <label>დაწყება<input name="startTime" defaultValue="10:00" /></label>
+        <label>დასრულება<input name="endTime" defaultValue="12:00" /></label>
         <label>ბავშვები<input name="plannedChildren" defaultValue="20" /></label>
         <label>შენიშვნა<textarea name="note" required /></label>
         <label>ფასი<input name="price" required inputMode="decimal" /></label>

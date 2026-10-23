@@ -26,7 +26,7 @@ export function BoundForm({
           {pending ? "სრულდება..." : label}
         </button>
       </div>
-      {state.message ? <p className={state.ok ? "ok" : "err"}>{state.message}</p> : null}
+      {state.message ? <p className={`${state.ok ? "ok" : "err"} break-all`}>{state.message}</p> : null}
     </form>
   );
 }

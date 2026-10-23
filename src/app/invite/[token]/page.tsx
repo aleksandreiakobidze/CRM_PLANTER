@@ -16,7 +16,7 @@ export default function InvitePage() {
           <img className="auth-logo" src="/brand/planter-logo.png" alt="Planter" />
           <ThemeToggle />
         </div>
-        <h1>ანგარიშის გააქტიურება</h1>
+        <h1>პაროლის დაყენება</h1>
         <p className="muted">პაროლი მინიმუმ 10 სიმბოლოა.</p>
         <form action={action} className="form">
           <input type="hidden" name="token" value={params.token} />
@@ -30,7 +30,7 @@ export default function InvitePage() {
           </label>
           <div className="row">
             <button disabled={pending} type="submit">
-              {pending ? "სრულდება..." : "ანგარიშის შექმნა"}
+              {pending ? "სრულდება..." : "შენახვა"}
             </button>
           </div>
           {state.message ? <p className="err">{state.message}</p> : null}

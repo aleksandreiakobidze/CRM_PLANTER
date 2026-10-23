@@ -3,11 +3,11 @@ import { formatInTimeZone } from "date-fns-tz";
 import { MonthCalendar, type CalendarChip, type CalendarDay } from "@/components/month-calendar";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { excursionStatusLabel } from "@/server/labels";
 import { addDaysIso, BUSINESS_TIME_ZONE, formatDateOnly, monthKey, parseDateOnly, periodBounds, tbilisiDateString, zonedDateTime } from "@/server/time";
 
 const TASK_STATUS: Record<string, string> = { open: "გასაკეთებელი", doing: "მიმდინარე", done: "შესრულებული" };
 const RENTAL_STATUS: Record<string, string> = { confirmed: "დადასტურებული", out: "გაცემული", returned: "დაბრუნებული", draft: "დრაფტი" };
-const EXCURSION_STATUS: Record<string, string> = { requested: "მოთხოვნილი", confirmed: "დადასტურებული", completed: "დასრულებული" };
 
 function taskChip(task: {
   id: string;
@@ -90,6 +90,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     getDb().excursionBooking.findMany({
       where: {
         organizationId: actor.organizationId,
+        status: { not: "cancelled" },
         startsAt: { gte: zonedDateTime(from, "00:00"), lt: zonedDateTime(addDaysIso(to, 1), "00:00") },
       },
       include: { customer: true, program: true },
@@ -117,12 +118,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         kind: "excursion" as const,
         label: `ექსკურსია · ${booking.customer.name}`,
         title: booking.number,
+        movable: booking.status !== "completed",
         lines: [
           booking.customer.name,
           booking.note.trim() || booking.program?.nameKa || "ექსკურსია",
           `${formatInTimeZone(booking.startsAt, BUSINESS_TIME_ZONE, "HH:mm")}–${formatInTimeZone(booking.endsAt, BUSINESS_TIME_ZONE, "HH:mm")}`,
           `ბავშვები: ${booking.plannedChildren}`,
-          EXCURSION_STATUS[booking.status] ?? booking.status,
+          excursionStatusLabel(booking.status),
         ],
         href: `/excursions/${booking.id}`,
         hrefLabel: "ჯავშნის გახსნა",

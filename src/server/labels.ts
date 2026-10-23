@@ -8,6 +8,16 @@ export const RELATIONSHIP: Record<string, { label: string; color: string; tone: 
   declined: { label: "არ სურს", color: "#d92d20", tone: "error" },
 };
 
+export function excursionStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    requested: "\u10db\u10dd\u10d7\u10ee\u10dd\u10d5\u10dc\u10d8\u10da\u10d8",
+    confirmed: "\u10d3\u10d0\u10d3\u10d0\u10e1\u10e2\u10e3\u10e0\u10d4\u10d1\u10e3\u10da\u10d8",
+    completed: "\u10d3\u10d0\u10e1\u10e0\u10e3\u10da\u10d4\u10d1\u10e3\u10da\u10d8",
+    cancelled: "\u10d2\u10d0\u10e3\u10e5\u10db\u10d4\u10d1\u10e3\u10da\u10d8",
+  };
+  return labels[status] ?? status;
+}
+
 export function orderStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     open: "ღია",

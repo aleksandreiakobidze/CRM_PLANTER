@@ -2,6 +2,7 @@ import Link from "next/link";
 import { RecordList } from "@/components/record-list";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { excursionStatusLabel } from "@/server/labels";
 import { D, moneyText } from "@/server/money";
 
 export default async function ExcursionsPage() {
@@ -20,7 +21,7 @@ export default async function ExcursionsPage() {
           <Link className="button" href="/excursions/new">ჯავშანი</Link>
         </div>
       </div>
-      <p>სტანდარტული ფანჯარია 13:00–16:00, თბილისის დროით.</p>
+      <p>სტანდარტული ფანჯარია 10:00–17:00, თბილისის დროით.</p>
       <RecordList
         storageKey="excursion-bookings"
         empty="ჯგუფი ჯერ არ არის."
@@ -38,7 +39,7 @@ export default async function ExcursionsPage() {
             customer: booking.customer.name,
             note: booking.note.trim() || booking.program?.nameKa || "",
             price: D(booking.price).gt(0) ? `${moneyText(D(booking.price))} ₾` : "",
-            status: booking.status,
+            status: excursionStatusLabel(booking.status),
           },
         }))}
       />

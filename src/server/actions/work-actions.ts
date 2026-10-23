@@ -8,7 +8,7 @@ import { addCustomerFiles, deleteCustomerFile } from "@/server/features/crm/cust
 import { addPlaceTerm, deletePlaceTerm } from "@/server/features/crm/place-terms";
 import { setMemberRole } from "@/server/features/admin/team-service";
 import { addActivity, addAddress, addContact, cancelTask, completeAssignment, createCustomer, createTask, reopenTask, rescheduleTask, setTaskStatus, updateCustomer } from "@/server/features/crm/customer-service";
-import { bookExcursion, completeExcursion } from "@/server/features/excursions/excursion-service";
+import { bookExcursion, cancelExcursion, completeExcursion, rescheduleExcursion, rescheduleExcursionToDate } from "@/server/features/excursions/excursion-service";
 import { createInvoiceFromOrder, createInvoiceFromRental } from "@/server/features/finance/invoice-service";
 import { recordPayment } from "@/server/features/finance/payment-service";
 import { confirmOpeningStock, confirmCustomerImport, dryRunCustomers, dryRunOpeningStock, dryRunProducts } from "@/server/features/import/import-service";
@@ -506,8 +506,8 @@ export async function bookExcursionAction(_prev: ActionState, formData: FormData
     const booking = await bookExcursion(actor, {
       customerId: String(formData.get("customerId") ?? ""),
       resourceId: String(formData.get("resourceId") ?? ""),
-      startsAt: zonedDateTime(date, String(formData.get("startTime") ?? "13:00")),
-      endsAt: zonedDateTime(date, String(formData.get("endTime") ?? "15:00")),
+      startsAt: zonedDateTime(date, String(formData.get("startTime") ?? "10:00")),
+      endsAt: zonedDateTime(date, String(formData.get("endTime") ?? "12:00")),
       plannedChildren: Number(formData.get("plannedChildren") ?? 1),
       note: String(formData.get("note") ?? ""),
       price: String(formData.get("price") ?? "0"),
@@ -519,6 +519,45 @@ export async function bookExcursionAction(_prev: ActionState, formData: FormData
     rethrowRedirect(error);
     return { ok: false, message: publicMessage(error) };
   }
+}
+
+export async function rescheduleExcursionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    const bookingId = String(formData.get("bookingId") ?? "");
+    const date = String(formData.get("date") ?? "");
+    await rescheduleExcursion(actor, bookingId, {
+      startsAt: zonedDateTime(date, String(formData.get("startTime") ?? "10:00")),
+      endsAt: zonedDateTime(date, String(formData.get("endTime") ?? "12:00")),
+    });
+    revalidatePath(`/excursions/${bookingId}`);
+    revalidatePath("/excursions");
+    revalidatePath("/calendar");
+    return done("\u10d7\u10d0\u10e0\u10d8\u10e6\u10d8 \u10e8\u10d4\u10d8\u10ea\u10d5\u10d0\u10da\u10d0");
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function rescheduleExcursionDayAction(bookingId: string, date: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const actor = await getActor();
+    await rescheduleExcursionToDate(actor, bookingId, date);
+    revalidatePath("/calendar");
+    revalidatePath("/excursions");
+    revalidatePath(`/excursions/${bookingId}`);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function cancelExcursionAction(bookingId: string): Promise<void> {
+  const actor = await getActor();
+  await cancelExcursion(actor, bookingId);
+  revalidatePath(`/excursions/${bookingId}`);
+  revalidatePath("/excursions");
+  revalidatePath("/calendar");
 }
 
 export async function completeExcursionAction(bookingId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {

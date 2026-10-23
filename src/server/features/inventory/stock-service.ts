@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { can, requirePermission, type Actor } from "@/server/auth/permissions";
-import { getDb, type Tx } from "@/server/db";
+import { getDb, isMysql, type Tx } from "@/server/db";
 import { BusinessError, isUniqueViolation } from "@/server/errors";
 import { D, Decimal } from "@/server/money";
 import { SELLABLE_LOCATION_KINDS } from "@/server/org";
@@ -18,11 +18,19 @@ type MovementInput = {
 };
 
 async function lockBalance(tx: Tx, organizationId: string, variantId: string, locationId: string) {
-  await tx.$executeRaw`
-    INSERT INTO stock_balances (id, organization_id, variant_id, location_id, on_hand, reserved)
-    VALUES (${randomUUID()}, ${organizationId}, ${variantId}, ${locationId}, 0, 0)
-    ON CONFLICT (organization_id, variant_id, location_id) DO NOTHING
-  `;
+  if (isMysql()) {
+    await tx.$executeRaw`
+      INSERT INTO stock_balances (id, organization_id, variant_id, location_id, on_hand, reserved)
+      VALUES (${randomUUID()}, ${organizationId}, ${variantId}, ${locationId}, 0, 0)
+      ON DUPLICATE KEY UPDATE id = id
+    `;
+  } else {
+    await tx.$executeRaw`
+      INSERT INTO stock_balances (id, organization_id, variant_id, location_id, on_hand, reserved)
+      VALUES (${randomUUID()}, ${organizationId}, ${variantId}, ${locationId}, 0, 0)
+      ON CONFLICT (organization_id, variant_id, location_id) DO NOTHING
+    `;
+  }
   await tx.$queryRaw`
     SELECT id FROM stock_balances
     WHERE organization_id = ${organizationId}

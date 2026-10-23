@@ -2,7 +2,7 @@ import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { PlaceCatalog } from "@/components/place-catalog";
 import { SettingsPanel } from "@/components/settings-panel";
-import { disconnectMicrosoftAction, inviteMemberAction, purgeMasterDataAction } from "@/server/actions/admin-actions";
+import { disconnectMicrosoftAction, inviteMemberAction, purgeMasterDataAction, resetMemberPasswordAction } from "@/server/actions/admin-actions";
 import { saveRsCredentialsAction } from "@/server/actions/waybill-actions";
 import { addPlaceTermAction, saveOrganizationAction, setMemberRoleAction } from "@/server/actions/work-actions";
 import { isMasterAdmin } from "@/server/auth/permissions";
@@ -80,7 +80,7 @@ export default async function SettingsPage() {
         <SettingsPanel id="team" title="გუნდი და როლები" hint="ადმინი ხედავს გაყიდვების თანხას. მენეჯერს ოპერაციები რჩება, თანხა არა.">
           <ul className="divide-y divide-gray-200 dark:divide-gray-800">
             {members.map((member) => (
-              <li key={member.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[minmax(160px,1fr)_minmax(240px,2fr)] md:items-center">
+              <li key={member.id} className="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[minmax(160px,1fr)_minmax(200px,1.4fr)_minmax(160px,1fr)] md:items-start">
                 <div>
                   <strong className="block text-sm font-semibold text-gray-800 dark:text-white/90">{member.user.name}</strong>
                   <small className="text-sm text-gray-400">{member.user.email}</small>
@@ -91,6 +91,9 @@ export default async function SettingsPage() {
                     როლი
                     <ComboBox name="roleId" options={roleOptions} defaultValue={member.roleId} />
                   </label>
+                </BoundForm>
+                <BoundForm action={resetMemberPasswordAction} label={ADMIN_COPY.resetSubmit}>
+                  <input type="hidden" name="membershipId" value={member.id} />
                 </BoundForm>
               </li>
             ))}

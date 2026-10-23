@@ -20,6 +20,14 @@ async function main() {
       });
     }
     await provisionOrganization(tx, org.id);
+    await tx.organization.updateMany({
+      where: { excursionWindowStart: "13:00", excursionWindowEnd: "16:00" },
+      data: { excursionWindowStart: "10:00", excursionWindowEnd: "17:00" },
+    });
+    await tx.excursionProgram.updateMany({
+      where: { windowStart: "13:00", windowEnd: "16:00" },
+      data: { windowStart: "10:00", windowEnd: "17:00" },
+    });
     const owner = await tx.role.findUniqueOrThrow({
       where: { organizationId_code: { organizationId: org.id, code: "owner" } },
     });

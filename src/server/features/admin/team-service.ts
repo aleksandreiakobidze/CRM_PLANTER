@@ -6,6 +6,7 @@ import { getDb } from "@/server/db";
 import { appUrl } from "@/server/env";
 import { BusinessError } from "@/server/errors";
 import { queueInviteMail } from "@/server/features/integrations/calendar-sync";
+import { withTx } from "@/server/tx";
 
 export async function listTeam(actor: Actor) {
   requirePermission(actor, "admin.users");
@@ -74,5 +75,42 @@ export async function inviteMember(actor: Actor, input: { email: string; name?: 
   });
   const url = `${appUrl()}/invite/${token}`;
   await queueInviteMail(actor, email, input.name?.trim() || email, url);
+  return { token, url };
+}
+
+export async function resetMemberPassword(actor: Actor, membershipId: string) {
+  requirePermission(actor, "admin.users");
+  const membership = await getDb().membership.findFirst({
+    where: { id: membershipId, organizationId: actor.organizationId, active: true },
+    include: { user: true, role: true },
+  });
+  if (!membership) throw new BusinessError("წევრი არ მოიძებნა", "not_found");
+  const email = membership.user.email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new BusinessError("ელფოსტა არასწორია", "validation");
+  }
+  const token = randomBytes(24).toString("base64url");
+  await withTx(async (tx) => {
+    await tx.invitation.updateMany({
+      where: {
+        organizationId: actor.organizationId,
+        email,
+        acceptedAt: null,
+      },
+      data: { expiresAt: new Date() },
+    });
+    await tx.invitation.create({
+      data: {
+        organizationId: actor.organizationId,
+        email,
+        roleId: membership.roleId,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + 2 * 86_400_000),
+        createdById: actor.userId,
+      },
+    });
+  });
+  const url = `${appUrl()}/invite/${token}`;
+  await queueInviteMail(actor, email, membership.user.name || email, url);
   return { token, url };
 }

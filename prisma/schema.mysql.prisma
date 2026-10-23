@@ -24,8 +24,8 @@ model Organization {
   portalEnabled            Boolean  @default(false) @map("portal_enabled")
   autoInvoiceAfterWaybill  Boolean  @default(false) @map("auto_invoice_after_waybill")
   rentalBufferHours        Int      @default(4) @map("rental_buffer_hours")
-  excursionWindowStart     String   @default("13:00") @map("excursion_window_start")
-  excursionWindowEnd       String   @default("16:00") @map("excursion_window_end")
+  excursionWindowStart     String   @default("10:00") @map("excursion_window_start")
+  excursionWindowEnd       String   @default("17:00") @map("excursion_window_end")
   maintenanceDefaultPercent Decimal @default(10) @map("maintenance_default_percent") @db.Decimal(6, 2)
   createdAt                DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt                DateTime @updatedAt @map("updated_at") @db.DateTime(3)
@@ -1212,8 +1212,8 @@ model ExcursionProgram {
   pricePerChild   Decimal @map("price_per_child") @db.Decimal(18, 2)
   minBillable     Int     @default(1) @map("min_billable")
   maxCapacity     Int     @map("max_capacity")
-  windowStart     String  @default("13:00") @map("window_start")
-  windowEnd       String  @default("16:00") @map("window_end")
+  windowStart     String  @default("10:00") @map("window_start")
+  windowEnd       String  @default("17:00") @map("window_end")
 
   organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   materials    ExcursionProgramMaterial[]

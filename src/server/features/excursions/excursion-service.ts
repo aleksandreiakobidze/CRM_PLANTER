@@ -1,13 +1,14 @@
 import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
-import { type Tx } from "@/server/db";
+import { getDb, type Tx } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { createManualInvoice } from "@/server/features/finance/invoice-service";
-import { changeBalance, consumeReservation } from "@/server/features/inventory/stock-service";
+import { changeBalance, consumeReservation, releaseReservation } from "@/server/features/inventory/stock-service";
 import { D, Decimal, roundMoney } from "@/server/money";
 import { nextNumber } from "@/server/numbers";
-import { withinWindow } from "@/server/time";
+import { BUSINESS_TIME_ZONE, withinWindow, zonedDateTime } from "@/server/time";
 import { withTx } from "@/server/tx";
+import { formatInTimeZone } from "date-fns-tz";
 
 export async function bookExcursion(
   actor: Actor,
@@ -39,7 +40,7 @@ async function bookExcursionTx(tx: Tx, actor: Actor, input: Parameters<typeof bo
   if (!price.isFinite() || price.lte(0)) throw new BusinessError("ფასი ნულზე მეტი უნდა იყოს", "validation");
   const organization = await tx.organization.findUniqueOrThrow({ where: { id: actor.organizationId } });
   if (!input.windowException && !withinWindow(input.startsAt, input.endsAt, organization.excursionWindowStart, organization.excursionWindowEnd)) {
-    throw new BusinessError("ჯგუფი 13:00–16:00 ფანჯარაში უნდა ჩაეტიოს", "outside_window");
+    throw new BusinessError(`ჯგუფი ${organization.excursionWindowStart}–${organization.excursionWindowEnd} ფანჯარაში უნდა ჩაეტიოს`, "outside_window");
   }
   await tx.$queryRaw`SELECT id FROM resources WHERE id = ${input.resourceId} FOR UPDATE`;
   const resource = await tx.resource.findFirst({ where: { id: input.resourceId, organizationId: actor.organizationId } });
@@ -98,6 +99,7 @@ export async function completeExcursion(actor: Actor, bookingId: string, attende
       include: { materials: true, program: true },
     });
     if (!booking) throw new BusinessError("ჯავშანი ვერ მოიძებნა", "not_found");
+    if (booking.status === "cancelled") throw new BusinessError("\u10d2\u10d0\u10e3\u10e5\u10db\u10d4\u10d1\u10e3\u10da\u10d8 \u10ef\u10d0\u10d5\u10e8\u10d0\u10dc\u10d8 \u10d5\u10d4\u10e0 \u10e1\u10e0\u10e3\u10da\u10d3\u10d4\u10d1\u10d0", "invalid_state");
     if (booking.status === "completed") return booking;
     if (booking.program && booking.materials.length > 0) {
       const sales = await tx.location.findUniqueOrThrow({
@@ -164,6 +166,113 @@ export async function completeExcursion(actor: Actor, bookingId: string, attende
       where: { id: booking.id },
       data: { status: "completed", attendedChildren, billableChildren: attendedChildren },
     });
+  });
+}
+
+export async function cancelExcursion(actor: Actor, bookingId: string) {
+  requirePermission(actor, "excursion.write");
+  return withTx(async (tx) => {
+    const booking = await tx.excursionBooking.findFirst({
+      where: { id: bookingId, organizationId: actor.organizationId },
+      include: { materials: true },
+    });
+    if (!booking) throw new BusinessError("ჯავშანი ვერ მოიძებნა", "not_found");
+    if (booking.status === "cancelled") return booking;
+    if (booking.status === "completed") {
+      throw new BusinessError("\u10d3\u10d0\u10e1\u10e0\u10e3\u10da\u10d4\u10d1\u10e3\u10da\u10d8 \u10ef\u10d0\u10d5\u10e8\u10d0\u10dc\u10d8 \u10d0\u10e6\u10d0\u10e0 \u10e3\u10e5\u10db\u10d3\u10d4\u10d1\u10d0", "invalid_state");
+    }
+    await tx.resourceReservation.updateMany({
+      where: { bookingId: booking.id },
+      data: { status: "cancelled" },
+    });
+    await tx.staffAssignment.deleteMany({ where: { bookingId: booking.id } });
+    for (const material of booking.materials) {
+      const reservation = await tx.reservation.findUnique({
+        where: { postingKey: `excursion-reserve:${booking.id}:${material.variantId}` },
+      });
+      if (reservation) await releaseReservation(tx, reservation.id, "released");
+    }
+    return tx.excursionBooking.update({
+      where: { id: booking.id },
+      data: { status: "cancelled" },
+    });
+  });
+}
+
+export async function rescheduleExcursion(
+  actor: Actor,
+  bookingId: string,
+  input: { startsAt: Date; endsAt: Date },
+) {
+  requirePermission(actor, "excursion.write");
+  return withTx(async (tx) => {
+    const booking = await tx.excursionBooking.findFirst({
+      where: { id: bookingId, organizationId: actor.organizationId },
+      include: { staff: true, resource: true },
+    });
+    if (!booking) throw new BusinessError("ჯავშანი ვერ მოიძებნა", "not_found");
+    if (booking.status === "cancelled") {
+      throw new BusinessError("\u10d2\u10d0\u10e3\u10e5\u10db\u10d4\u10d1\u10e3\u10da\u10d8 \u10ef\u10d0\u10d5\u10e8\u10d0\u10dc\u10d8 \u10d0\u10e6\u10d0\u10e0 \u10d8\u10ea\u10d5\u10da\u10d4\u10d1\u10d0", "invalid_state");
+    }
+    if (booking.status === "completed") {
+      throw new BusinessError("\u10d3\u10d0\u10e1\u10e0\u10e3\u10da\u10d4\u10d1\u10e3\u10da\u10d8 \u10ef\u10d0\u10d5\u10e8\u10d0\u10dc\u10d8 \u10d0\u10e6\u10d0\u10e0 \u10d8\u10ea\u10d5\u10da\u10d4\u10d1\u10d0", "invalid_state");
+    }
+    if (input.endsAt.getTime() <= input.startsAt.getTime()) {
+      throw new BusinessError("\u10d3\u10d0\u10e1\u10e0\u10e3\u10da\u10d4\u10d1\u10d0 \u10d3\u10d0\u10ec\u10e7\u10d4\u10d1\u10d0\u10d6\u10d4 \u10d0\u10d3\u10e0\u10d4 \u10d5\u10d4\u10e0 \u10d8\u10e5\u10dc\u10d4\u10d1\u10d0", "validation");
+    }
+    const organization = await tx.organization.findUniqueOrThrow({ where: { id: actor.organizationId } });
+    if (!booking.windowException && !withinWindow(input.startsAt, input.endsAt, organization.excursionWindowStart, organization.excursionWindowEnd)) {
+      throw new BusinessError(`ჯგუფი ${organization.excursionWindowStart}–${organization.excursionWindowEnd} ფანჯარაში უნდა ჩაეტიოს`, "outside_window");
+    }
+    await tx.$queryRaw`SELECT id FROM resources WHERE id = ${booking.resourceId} FOR UPDATE`;
+    const overlapping = await tx.resourceReservation.count({
+      where: {
+        resourceId: booking.resourceId,
+        status: { in: ["held", "confirmed"] },
+        bookingId: { not: booking.id },
+        startsAt: { lt: input.endsAt },
+        endsAt: { gt: input.startsAt },
+      },
+    });
+    if (overlapping >= booking.resource.capacity) throw new BusinessError("ამ დროს სივრცე დაკავებულია", "capacity");
+    for (const staff of booking.staff) {
+      const clash = await tx.staffAssignment.findFirst({
+        where: {
+          userId: staff.userId,
+          id: { not: staff.id },
+          startsAt: { lt: input.endsAt },
+          endsAt: { gt: input.startsAt },
+        },
+      });
+      if (clash) throw new BusinessError("თანამშრომელი ამ დროს უკვე დაკავებულია", "staff_overlap");
+    }
+    await tx.resourceReservation.updateMany({
+      where: { bookingId: booking.id, status: { in: ["held", "confirmed"] } },
+      data: { startsAt: input.startsAt, endsAt: input.endsAt },
+    });
+    await tx.staffAssignment.updateMany({
+      where: { bookingId: booking.id },
+      data: { startsAt: input.startsAt, endsAt: input.endsAt },
+    });
+    return tx.excursionBooking.update({
+      where: { id: booking.id },
+      data: { startsAt: input.startsAt, endsAt: input.endsAt },
+    });
+  });
+}
+
+export async function rescheduleExcursionToDate(actor: Actor, bookingId: string, date: string) {
+  requirePermission(actor, "excursion.write");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new BusinessError("\u10d7\u10d0\u10e0\u10d8\u10e6\u10d8 \u10d0\u10e0\u10d0\u10e1\u10ec\u10dd\u10e0\u10d8\u10d0", "validation");
+  }
+  const booking = await getDb().excursionBooking.findFirst({
+    where: { id: bookingId, organizationId: actor.organizationId },
+  });
+  if (!booking) throw new BusinessError("ჯავშანი ვერ მოიძებნა", "not_found");
+  return rescheduleExcursion(actor, bookingId, {
+    startsAt: zonedDateTime(date, formatInTimeZone(booking.startsAt, BUSINESS_TIME_ZONE, "HH:mm")),
+    endsAt: zonedDateTime(date, formatInTimeZone(booking.endsAt, BUSINESS_TIME_ZONE, "HH:mm")),
   });
 }
 

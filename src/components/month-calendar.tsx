@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { rescheduleTaskAction } from "@/server/actions/work-actions";
+import { rescheduleExcursionDayAction, rescheduleTaskAction } from "@/server/actions/work-actions";
 
 export type CalendarChip = {
   id: string;
@@ -15,6 +15,7 @@ export type CalendarChip = {
   hrefLabel?: string;
   files?: { id: string; name: string }[];
   late?: boolean;
+  movable?: boolean;
 };
 
 const KIND_LABEL = { task: "დავალება", rental: "გაქირავება", excursion: "ექსკურსია" };
@@ -50,7 +51,7 @@ export function MonthCalendar({
   const [openChip, setOpenChip] = useState<CalendarChip | null>(null);
   const dragged = useRef(false);
 
-  function move(taskId: string, dueOn: string | null) {
+  function moveTask(taskId: string, dueOn: string | null) {
     setError("");
     startTransition(async () => {
       try {
@@ -62,11 +63,35 @@ export function MonthCalendar({
     });
   }
 
+  function moveExcursion(bookingId: string, date: string | null) {
+    setError("");
+    if (!date) {
+      setError("ექსკურსიას თარიღი სჭირდება");
+      return;
+    }
+    startTransition(async () => {
+      const result = await rescheduleExcursionDayAction(bookingId, date);
+      if (!result.ok) {
+        setError(result.message || "თარიღი ვერ შეიცვალა");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function onDrop(event: React.DragEvent, dueOn: string | null) {
     event.preventDefault();
     setOver(null);
-    const taskId = event.dataTransfer.getData("text/plain");
-    if (taskId) move(taskId, dueOn);
+    const raw = event.dataTransfer.getData("text/plain");
+    if (!raw) return;
+    const sep = raw.indexOf(":");
+    const kind = sep === -1 ? "task" : raw.slice(0, sep);
+    const id = sep === -1 ? raw : raw.slice(sep + 1);
+    if (kind === "excursion") {
+      moveExcursion(id, dueOn);
+      return;
+    }
+    if (kind === "task") moveTask(id, dueOn);
   }
 
   function showChip(chip: CalendarChip) {
@@ -92,6 +117,7 @@ export function MonthCalendar({
 
   return (
     <div className={pending ? "calendar-layout pending" : "calendar-layout"}>
+      {error ? <p className="err">{error}</p> : null}
       <div className="calendar-grid" role="grid" aria-label="თვის კალენდარი">
         {WEEKDAYS.map((day) => <div key={day} className="calendar-weekday">{day}</div>)}
         {days.map((day) => (
@@ -193,7 +219,7 @@ export function MonthCalendar({
 }
 
 function CalendarChipView({ chip, onOpen, onDrag, onDragEnd }: { chip: CalendarChip; onOpen: () => void; onDrag: () => void; onDragEnd: () => void }) {
-  const draggable = chip.kind === "task";
+  const draggable = chip.kind === "task" || (chip.kind === "excursion" && chip.movable !== false);
   return (
     <button
       type="button"
@@ -209,7 +235,7 @@ function CalendarChipView({ chip, onOpen, onDrag, onDragEnd }: { chip: CalendarC
           return;
         }
         onDrag();
-        event.dataTransfer.setData("text/plain", chip.id);
+        event.dataTransfer.setData("text/plain", `${chip.kind}:${chip.id}`);
         event.dataTransfer.effectAllowed = "move";
       }}
       onDragEnd={onDragEnd}

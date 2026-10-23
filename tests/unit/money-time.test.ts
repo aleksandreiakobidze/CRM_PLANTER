@@ -28,11 +28,13 @@ describe("ფული და თბილისის დრო", () => {
     expect(formatDateOnly(parseDateOnly("2026-10-20"))).toBe("2026-10-20");
   });
 
-  it("ექსკურსია 13:00–16:00 ფანჯარაში ჯდება", () => {
-    const inside = withinWindow(zonedDateTime("2026-11-21", "13:00"), zonedDateTime("2026-11-21", "15:00"), "13:00", "16:00");
-    const early = withinWindow(zonedDateTime("2026-11-21", "12:00"), zonedDateTime("2026-11-21", "14:00"), "13:00", "16:00");
-    const late = withinWindow(zonedDateTime("2026-11-21", "13:00"), zonedDateTime("2026-11-21", "16:30"), "13:00", "16:00");
+  it("ექსკურსია 10:00–17:00 ფანჯარაში ჯდება", () => {
+    const inside = withinWindow(zonedDateTime("2026-11-21", "10:00"), zonedDateTime("2026-11-21", "17:00"), "10:00", "17:00");
+    const midday = withinWindow(zonedDateTime("2026-11-21", "13:00"), zonedDateTime("2026-11-21", "15:00"), "10:00", "17:00");
+    const early = withinWindow(zonedDateTime("2026-11-21", "09:00"), zonedDateTime("2026-11-21", "11:00"), "10:00", "17:00");
+    const late = withinWindow(zonedDateTime("2026-11-21", "16:00"), zonedDateTime("2026-11-21", "17:30"), "10:00", "17:00");
     expect(inside).toBe(true);
+    expect(midday).toBe(true);
     expect(early).toBe(false);
     expect(late).toBe(false);
   });
