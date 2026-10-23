@@ -2,7 +2,7 @@ import Link from "next/link";
 import { RecordList } from "@/components/record-list";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
-import { excursionStatusLabel } from "@/server/labels";
+import { excursionStatusLabel, PHOTO_ALLOWED_SHORT, photoAllowedLabel } from "@/server/labels";
 import { D, moneyText } from "@/server/money";
 
 export default async function ExcursionsPage() {
@@ -30,6 +30,7 @@ export default async function ExcursionsPage() {
           { key: "customer", header: "კლიენტი" },
           { key: "note", header: "შენიშვნა" },
           { key: "price", header: "ფასი" },
+          { key: "photo", header: PHOTO_ALLOWED_SHORT },
           { key: "status", header: "სტატუსი" },
         ]}
         rows={bookings.map((booking) => ({
@@ -39,6 +40,7 @@ export default async function ExcursionsPage() {
             customer: booking.customer.name,
             note: booking.note.trim() || booking.program?.nameKa || "",
             price: D(booking.price).gt(0) ? `${moneyText(D(booking.price))} ₾` : "",
+            photo: photoAllowedLabel(booking.photoAllowed),
             status: excursionStatusLabel(booking.status),
           },
         }))}

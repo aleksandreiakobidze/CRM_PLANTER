@@ -8,6 +8,15 @@ export const RELATIONSHIP: Record<string, { label: string; color: string; tone: 
   declined: { label: "არ სურს", color: "#d92d20", tone: "error" },
 };
 
+export const PHOTO_ALLOWED_FIELD = "\u10e4\u10dd\u10e2\u10dd\u10d2\u10d0\u10d3\u10d0\u10e6\u10d4\u10d1\u10d0 \u10e8\u10d4\u10d8\u10eb\u10da\u10d4\u10d1\u10d0";
+export const PHOTO_ALLOWED_SHORT = "\u10e4\u10dd\u10e2\u10dd";
+
+export function photoAllowedLabel(allowed: boolean): string {
+  return allowed
+    ? "\u10e4\u10dd\u10e2\u10dd \u10e8\u10d4\u10d8\u10eb\u10da\u10d4\u10d1\u10d0"
+    : "\u10e4\u10dd\u10e2\u10dd \u10d0\u10e0 \u10e8\u10d4\u10d8\u10eb\u10da\u10d4\u10d1\u10d0";
+}
+
 export function excursionStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     requested: "\u10db\u10dd\u10d7\u10ee\u10dd\u10d5\u10dc\u10d8\u10da\u10d8",

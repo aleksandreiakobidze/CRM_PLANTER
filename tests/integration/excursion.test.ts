@@ -136,4 +136,28 @@ describe("ექსკურსია", () => {
     await completeExcursion(actor, booking.id, 10);
     await expect(rescheduleExcursionToDate(actor, booking.id, "2026-12-05")).rejects.toThrow(/იცვლ/);
   });
+
+  it("stores photo permission on book and edit", async () => {
+    const { actor } = await makeWorld();
+    const school = await createCustomer(actor, { kind: "company", name: "\u10e1\u10d0\u10e2\u10d4\u10e1\u10e2\u10dd \u10e1\u10d9\u10dd\u10da\u10d0 E", segment: "school" });
+    const resource = await getDb().resource.findFirstOrThrow({ where: { organizationId: actor.organizationId } });
+    const booking = await bookExcursion(actor, {
+      customerId: school.id,
+      resourceId: resource.id,
+      startsAt: zonedDateTime("2026-12-08", "13:00"),
+      endsAt: zonedDateTime("2026-12-08", "15:00"),
+      plannedChildren: 9,
+      note: "\u10e4\u10dd\u10e2\u10dd",
+      price: "35",
+      photoAllowed: true,
+      postingKey: `photo-${resource.id}`,
+    });
+    expect(booking.photoAllowed).toBe(true);
+    const updated = await rescheduleExcursion(actor, booking.id, {
+      startsAt: booking.startsAt,
+      endsAt: booking.endsAt,
+      photoAllowed: false,
+    });
+    expect(updated.photoAllowed).toBe(false);
+  });
 });

@@ -33,6 +33,7 @@ export function MessengerPage() {
 
 function Messenger({ variant }: { variant: "dock" | "page" }) {
   const [open, setOpen] = useState(variant === "page");
+  const [inboxOpen, setInboxOpen] = useState(true);
   const [inbox, setInbox] = useState<Inbox | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
@@ -87,6 +88,12 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length, threadId]);
 
+  useEffect(() => {
+    if (variant !== "dock" || !open) return;
+    document.body.classList.add("messenger-lock");
+    return () => document.body.classList.remove("messenger-lock");
+  }, [open, variant]);
+
   const thread = inbox?.threads.find((item) => item.id === threadId);
 
   async function send() {
@@ -127,6 +134,7 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
       );
       setThreadId(data.id);
       setMessages([]);
+      setInboxOpen(false);
       setOpen(true);
       void loadInbox();
     } catch (item) {
@@ -135,9 +143,16 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
   }
 
   const panel = (
-    <div className={variant === "page" ? "messenger-page" : "messenger-panel"}>
+    <div className={`${variant === "page" ? "messenger-page" : "messenger-panel"} ${inboxOpen ? "is-inbox" : "is-thread"}`}>
       <aside className="messenger-aside">
-        <h2>{CHAT_COPY.chat}</h2>
+        <header className="messenger-inbox-head">
+          <h2>{CHAT_COPY.chat}</h2>
+          {variant === "dock" ? (
+            <button type="button" className="secondary" onClick={() => setOpen(false)} aria-label={CHAT_COPY.close}>
+              <X size={16} />
+            </button>
+          ) : null}
+        </header>
         <ul className="messenger-threads">
           {(inbox?.threads ?? []).map((item) => (
             <li key={item.id}>
@@ -147,6 +162,7 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
                 onClick={() => {
                   setThreadId(item.id);
                   setMessages([]);
+                  setInboxOpen(false);
                 }}
               >
                 <strong>{item.title}</strong>
@@ -173,6 +189,9 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
       </aside>
       <section className="messenger-room" aria-live="polite">
         <header>
+          <button type="button" className="secondary messenger-back" onClick={() => setInboxOpen(true)}>
+            {CHAT_COPY.back}
+          </button>
           <strong>{thread?.title ?? CHAT_COPY.chat}</strong>
           {variant === "dock" ? (
             <button type="button" className="secondary" onClick={() => setOpen(false)} aria-label={CHAT_COPY.close}>
@@ -229,7 +248,10 @@ function Messenger({ variant }: { variant: "dock" | "page" }) {
         aria-expanded={open}
         aria-label={open ? CHAT_COPY.close : CHAT_COPY.open}
         title={CHAT_COPY.chat}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen((current) => {
+          if (!current) setInboxOpen(true);
+          return !current;
+        })}
       >
         <MessageCircle size={18} />
         {(inbox?.unread ?? 0) > 0 ? <span className="messenger-badge">{inbox?.unread}</span> : null}

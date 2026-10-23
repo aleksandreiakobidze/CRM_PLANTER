@@ -4,6 +4,7 @@ import { customerOption } from "@/lib/customer-option";
 import { bookExcursionAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { PHOTO_ALLOWED_FIELD } from "@/server/labels";
 
 export default async function NewExcursionPage() {
   const actor = await getActor();
@@ -24,6 +25,7 @@ export default async function NewExcursionPage() {
         <label>ბავშვები<input name="plannedChildren" defaultValue="20" /></label>
         <label>შენიშვნა<textarea name="note" required /></label>
         <label>ფასი<input name="price" required inputMode="decimal" /></label>
+        <label><input type="checkbox" name="photoAllowed" value="yes" /> {PHOTO_ALLOWED_FIELD}</label>
         <label><input type="checkbox" name="windowException" value="yes" /> ადმინისტრატორის გამონაკლისი ფანჯარაზე</label>
       </BoundForm>
     </section>

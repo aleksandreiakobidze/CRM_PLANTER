@@ -5,7 +5,7 @@ import { BoundForm } from "@/components/bound-form";
 import { cancelExcursionAction, completeExcursionAction, rescheduleExcursionAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
-import { excursionStatusLabel } from "@/server/labels";
+import { excursionStatusLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel } from "@/server/labels";
 import { D, moneyText } from "@/server/money";
 import { BUSINESS_TIME_ZONE } from "@/server/time";
 
@@ -32,7 +32,7 @@ export default async function ExcursionDetailPage({ params }: { params: Promise<
       <div className="page-head">
         <Link className="back" href="/excursions">ექსკურსიები</Link>
         <h1>{booking.number}</h1>
-        <p>{booking.customer.name} · {label}{price ? ` · ${price}` : ""} · {date} {startTime}–{endTime} · დაგეგმილი {booking.plannedChildren} · {excursionStatusLabel(booking.status)}</p>
+        <p>{booking.customer.name} · {label}{price ? ` · ${price}` : ""} · {date} {startTime}–{endTime} · დაგეგმილი {booking.plannedChildren} · {photoAllowedLabel(booking.photoAllowed)} · {excursionStatusLabel(booking.status)}</p>
       </div>
       <div className="card">
         {booking.materials.length > 0 ? (
@@ -45,6 +45,7 @@ export default async function ExcursionDetailPage({ params }: { params: Promise<
               <label>თარიღი<input name="date" type="date" required defaultValue={date} /></label>
               <label>დაწყება<input name="startTime" defaultValue={startTime} /></label>
               <label>დასრულება<input name="endTime" defaultValue={endTime} /></label>
+              <label><input type="checkbox" name="photoAllowed" value="yes" defaultChecked={booking.photoAllowed} /> {PHOTO_ALLOWED_FIELD}</label>
             </BoundForm>
             <BoundForm action={completeExcursionAction.bind(null, booking.id)} label="დასრულება">
               <label>დასწრებული ბავშვები<input name="attended" required defaultValue={String(booking.plannedChildren)} /></label>

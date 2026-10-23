@@ -1250,6 +1250,7 @@ model ExcursionBooking {
   billableChildren  Int?     @map("billable_children")
   billableBasis     String   @default("attended") @map("billable_basis")
   windowException   Boolean  @default(false) @map("window_exception")
+  photoAllowed      Boolean  @default(false) @map("photo_allowed")
   postingKey        String   @unique @map("posting_key")
 
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)

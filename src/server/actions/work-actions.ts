@@ -513,6 +513,7 @@ export async function bookExcursionAction(_prev: ActionState, formData: FormData
       price: String(formData.get("price") ?? "0"),
       postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
       windowException: formData.get("windowException") === "yes",
+      photoAllowed: formData.get("photoAllowed") === "yes",
     });
     redirect(`/excursions/${booking.id}`);
   } catch (error) {
@@ -529,6 +530,7 @@ export async function rescheduleExcursionAction(_prev: ActionState, formData: Fo
     await rescheduleExcursion(actor, bookingId, {
       startsAt: zonedDateTime(date, String(formData.get("startTime") ?? "10:00")),
       endsAt: zonedDateTime(date, String(formData.get("endTime") ?? "12:00")),
+      photoAllowed: formData.get("photoAllowed") === "yes",
     });
     revalidatePath(`/excursions/${bookingId}`);
     revalidatePath("/excursions");

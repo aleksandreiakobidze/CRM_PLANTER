@@ -22,6 +22,7 @@ export async function bookExcursion(
     price: string;
     staffUserIds?: string[];
     windowException?: boolean;
+    photoAllowed?: boolean;
     postingKey: string;
     billableBasis?: "planned" | "attended";
   },
@@ -75,6 +76,7 @@ async function bookExcursionTx(tx: Tx, actor: Actor, input: Parameters<typeof bo
       plannedChildren: input.plannedChildren,
       billableBasis: input.billableBasis ?? "attended",
       windowException: input.windowException ?? false,
+      photoAllowed: input.photoAllowed ?? false,
       postingKey: input.postingKey,
       staff: {
         create: (input.staffUserIds ?? []).map((userId) => ({
@@ -202,7 +204,7 @@ export async function cancelExcursion(actor: Actor, bookingId: string) {
 export async function rescheduleExcursion(
   actor: Actor,
   bookingId: string,
-  input: { startsAt: Date; endsAt: Date },
+  input: { startsAt: Date; endsAt: Date; photoAllowed?: boolean },
 ) {
   requirePermission(actor, "excursion.write");
   return withTx(async (tx) => {
@@ -256,7 +258,11 @@ export async function rescheduleExcursion(
     });
     return tx.excursionBooking.update({
       where: { id: booking.id },
-      data: { startsAt: input.startsAt, endsAt: input.endsAt },
+      data: {
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        ...(input.photoAllowed === undefined ? {} : { photoAllowed: input.photoAllowed }),
+      },
     });
   });
 }

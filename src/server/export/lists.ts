@@ -6,7 +6,7 @@ import { customerFilterOptions, customerListFilters, customerListWhere, type Cus
 import { listBalances } from "@/server/features/inventory/stock-service";
 import { opsDashboard } from "@/server/features/reports/ops-reports";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
-import { externalHref, hostLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
+import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
 import { displayPhone } from "@/server/phone";
 import { formatInTimeZone } from "date-fns-tz";
@@ -402,6 +402,7 @@ export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
         { header: "კლიენტი", kind: "text", width: 28 },
         { header: "შენიშვნა", kind: "text", width: 28 },
         { header: "ფასი", kind: "money" },
+        { header: PHOTO_ALLOWED_FIELD, kind: "text", width: 22 },
         { header: "სტატუსი", kind: "text" },
         { header: "დაწყება", kind: "text", width: 18 },
         { header: "დასრულება", kind: "text", width: 18 },
@@ -414,6 +415,7 @@ export async function excursionsWorkbook(actor: Actor): Promise<ExportFile> {
         booking.customer.name,
         booking.note.trim() || booking.program?.nameKa || "",
         excelNumber(booking.price, 2),
+        photoAllowedLabel(booking.photoAllowed),
         documentStatus(booking.status),
         when(booking.startsAt),
         when(booking.endsAt),

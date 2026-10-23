@@ -3,7 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { MonthCalendar, type CalendarChip, type CalendarDay } from "@/components/month-calendar";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
-import { excursionStatusLabel } from "@/server/labels";
+import { excursionStatusLabel, photoAllowedLabel } from "@/server/labels";
 import { addDaysIso, BUSINESS_TIME_ZONE, formatDateOnly, monthKey, parseDateOnly, periodBounds, tbilisiDateString, zonedDateTime } from "@/server/time";
 
 const TASK_STATUS: Record<string, string> = { open: "გასაკეთებელი", doing: "მიმდინარე", done: "შესრულებული" };
@@ -124,6 +124,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           booking.note.trim() || booking.program?.nameKa || "ექსკურსია",
           `${formatInTimeZone(booking.startsAt, BUSINESS_TIME_ZONE, "HH:mm")}–${formatInTimeZone(booking.endsAt, BUSINESS_TIME_ZONE, "HH:mm")}`,
           `ბავშვები: ${booking.plannedChildren}`,
+          photoAllowedLabel(booking.photoAllowed),
           excursionStatusLabel(booking.status),
         ],
         href: `/excursions/${booking.id}`,
