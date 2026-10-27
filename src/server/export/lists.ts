@@ -9,6 +9,7 @@ import { opsDashboard } from "@/server/features/reports/ops-reports";
 import { excursionReport, type ExcursionReportFilters } from "@/server/features/reports/excursion-report";
 import { crmReport, type CrmReportFilters } from "@/server/features/reports/crm-report";
 import type { Bucket } from "@/server/features/reports/report-kit";
+import { salesReport, type SalesReportFilters } from "@/server/features/reports/sales-report";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
@@ -675,6 +676,78 @@ export async function crmReportWorkbook(actor: Actor, filters: CrmReportFilters)
   ]);
 }
 
+function amountSheet(name: string, header: string, rows: Bucket[], showMoney: boolean, withQuantity = false): SheetSpec {
+  return {
+    name,
+    columns: [
+      { header, kind: "text", width: 34 },
+      { header: "ჩანაწერი", kind: "int", total: true },
+      ...(withQuantity ? [{ header: "რაოდენობა", kind: "qty" as const, total: true }] : []),
+      ...(showMoney ? [{ header: "თანხა", kind: "money" as const, total: true }] : []),
+    ],
+    rows: rows.map((row) => [
+      row.label,
+      row.count,
+      ...(withQuantity ? [excelNumber(row.quantity, 3)] : []),
+      ...(showMoney ? [excelNumber(row.amount, 2)] : []),
+    ]),
+  };
+}
+
+export async function salesReportWorkbook(actor: Actor, filters: SalesReportFilters): Promise<ExportFile> {
+  const data = await salesReport(actor, filters);
+  const money = data.showMoney;
+  return file("გაყიდვების რეპორტი", "sales-report", [
+    {
+      name: "ინვოისები",
+      columns: [
+        { header: "ნომერი", kind: "text", width: 16 },
+        { header: "თარიღი", kind: "date" },
+        { header: "კლიენტი", kind: "text", width: 30 },
+        { header: "მენეჯერი", kind: "text", width: 20 },
+        { header: "წყარო", kind: "text", width: 14 },
+        { header: "ხაზი", kind: "int" },
+        ...(money
+          ? [
+              { header: "დღგ-ს გარეშე", kind: "money" as const, total: true },
+              { header: "სულ", kind: "money" as const, total: true },
+              { header: "დარჩენილი", kind: "money" as const, total: true },
+            ]
+          : []),
+      ],
+      rows: data.rows.map((row) => [
+        row.number,
+        excelDate(row.issuedOn),
+        row.customer,
+        row.owner,
+        row.source,
+        row.lines,
+        ...(money ? [excelNumber(row.net, 2), excelNumber(row.total, 2), excelNumber(row.remaining, 2)] : []),
+      ]),
+    },
+    amountSheet("კლიენტები", "კლიენტი", data.breakdowns.customers, money),
+    amountSheet("პროდუქტები", "პროდუქტი / მომსახურება", data.breakdowns.products, money, true),
+    amountSheet("მენეჯერები", "მენეჯერი", data.breakdowns.owners, money),
+    amountSheet("წყარო", "წყარო", data.breakdowns.sources, money),
+    amountSheet("თვეები", "თვე", data.breakdowns.months, money),
+    ...(money
+      ? [
+          {
+            name: "ვადაგადაცილება",
+            columns: [
+              { header: "ინვოისი", kind: "text" as const },
+              { header: "კლიენტი", kind: "text" as const, width: 28 },
+              { header: "დარჩენილი", kind: "money" as const, total: true },
+              { header: "დღე", kind: "int" as const },
+              { header: "ჯგუფი", kind: "text" as const },
+            ],
+            rows: data.aging.map((row) => [row.number, row.customer, excelNumber(row.remaining, 2), row.days, row.bucket]),
+          },
+        ]
+      : []),
+  ]);
+}
+
 function params<T extends string>(url: URL, keys: readonly T[]): Partial<Record<T, string>> {
   const out: Partial<Record<T, string>> = {};
   for (const key of keys) {
@@ -700,6 +773,7 @@ const BUILDERS = {
   "excursion-report": (actor: Actor, url: URL) =>
     excursionReportWorkbook(actor, params(url, ["from", "to", "customerId", "programId", "guideId", "status", "photo"] as const)),
   "crm-report": (actor: Actor, url: URL) => crmReportWorkbook(actor, params(url, ["from", "to", "ownerId", "segment"] as const)),
+  "sales-report": (actor: Actor, url: URL) => salesReportWorkbook(actor, params(url, ["from", "to", "customerId", "ownerId", "source"] as const)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
