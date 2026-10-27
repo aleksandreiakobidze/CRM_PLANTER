@@ -606,6 +606,8 @@ model StockMovement {
   variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, variantId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, sourceType, sourceId])
   @@map("stock_movements")
 }
 

@@ -15,6 +15,7 @@ export default async function InventoryPage() {
         <h1>მარაგები</h1>
         <div className="actions">
           {canRead ? <Link className="button secondary" href="/export/inventory">Excel</Link> : null}
+          <Link className="button secondary" href="/inventory/movements">მოძრაობა</Link>
           <Link className="button secondary" href="/inventory/count">ინვენტარიზაცია</Link>
           <Link className="button secondary" href="/inventory/transfer">გადატანა</Link>
           <Link className="button secondary" href="/inventory/waybill">შიდა გადაზიდვა</Link>

@@ -108,7 +108,7 @@ export async function postOpeningStock(
 export async function postOpeningStockTx(
   tx: Tx,
   actor: Actor,
-  input: { variantId: string; locationId: string; quantity: Decimal; unitCost: Decimal; postingKey: string; reason?: string },
+  input: { variantId: string; locationId: string; quantity: Decimal; unitCost: Decimal; postingKey: string; reason?: string; sourceId?: string },
 ) {
   const variant = await tx.productVariant.findFirst({
     where: { id: input.variantId, organizationId: actor.organizationId },
@@ -132,7 +132,7 @@ export async function postOpeningStockTx(
       movementType: "opening",
       postingKey: input.postingKey,
       sourceType: "opening",
-      sourceId: input.postingKey,
+      sourceId: input.sourceId ?? input.postingKey,
       reason: input.reason ?? "საწყისი ნაშთი",
       actorId: actor.userId,
     },
@@ -436,6 +436,88 @@ export async function applyAverageCostAdjustment(tx: Tx, organizationId: string,
     where: { id: variant.id },
     data: { averageCost: nextAvg.toFixed(4) },
   });
+}
+
+type StockDocLine = { variantId: string; quantity: string; unitCost?: string };
+
+function stockDocLines(lines: StockDocLine[]) {
+  if (lines.length === 0) throw new BusinessError("ერთი ხაზი მაინც სჭირდება", "validation");
+  return lines.map((line) => {
+    const quantity = D(line.quantity || "0");
+    if (!line.variantId) throw new BusinessError("ხაზს აითემი არ აქვს არჩეული", "validation");
+    if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
+    const unitCost = D(line.unitCost || "0");
+    if (unitCost.lt(0)) throw new BusinessError("თვითღირებულება უარყოფითი ვერ იქნება", "validation");
+    return { variantId: line.variantId, quantity, unitCost };
+  });
+}
+
+async function alreadyPosted(organizationId: string, postingKey: string) {
+  return (await getDb().stockMovement.count({ where: { organizationId, sourceId: postingKey } })) > 0;
+}
+
+export async function postOpeningDocument(
+  actor: Actor,
+  input: { locationId: string; postingKey: string; note?: string; lines: StockDocLine[] },
+) {
+  requirePermission(actor, "stock.write");
+  const lines = stockDocLines(input.lines);
+  if (await alreadyPosted(actor.organizationId, input.postingKey)) return { postingKey: input.postingKey, lines: lines.length };
+  try {
+    await withTx(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: actor.organizationId } });
+      if (!location) throw new BusinessError("ლოკაცია ვერ მოიძებნა", "not_found");
+      for (const [index, line] of lines.entries()) {
+        await postOpeningStockTx(tx, actor, {
+          ...line,
+          locationId: location.id,
+          postingKey: `${input.postingKey}:${index}`,
+          sourceId: input.postingKey,
+          reason: input.note?.trim() || "საწყისი ნაშთი",
+        });
+      }
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+  }
+  return { postingKey: input.postingKey, lines: lines.length };
+}
+
+export async function transferDocument(
+  actor: Actor,
+  input: { fromLocationId: string; toLocationId: string; postingKey: string; note?: string; lines: StockDocLine[] },
+) {
+  requirePermission(actor, "stock.write");
+  const lines = stockDocLines(input.lines);
+  if (input.fromLocationId === input.toLocationId) throw new BusinessError("ლოკაცია უნდა განსხვავდებოდეს", "validation");
+  if (await alreadyPosted(actor.organizationId, input.postingKey)) return { postingKey: input.postingKey, lines: lines.length };
+  try {
+    await withTx(async (tx) => {
+      const locations = await tx.location.count({
+        where: { id: { in: [input.fromLocationId, input.toLocationId] }, organizationId: actor.organizationId },
+      });
+      if (locations !== 2) throw new BusinessError("ლოკაცია ვერ მოიძებნა", "not_found");
+      for (const [index, line] of lines.entries()) {
+        const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId: actor.organizationId } });
+        if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+        await transferQuantity(tx, {
+          organizationId: actor.organizationId,
+          variantId: variant.id,
+          fromLocationId: input.fromLocationId,
+          toLocationId: input.toLocationId,
+          quantity: line.quantity,
+          unitCost: D(variant.averageCost),
+          postingKey: `${input.postingKey}:${index}`,
+          sourceType: "transfer",
+          sourceId: input.postingKey,
+          actorId: actor.userId,
+        });
+      }
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+  }
+  return { postingKey: input.postingKey, lines: lines.length };
 }
 
 export async function transferStock(

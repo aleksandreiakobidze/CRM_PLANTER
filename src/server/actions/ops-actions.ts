@@ -22,7 +22,7 @@ import {
   repotBatch,
   setCountQuantities,
 } from "@/server/features/greenhouse/greenhouse-service";
-import { transferStock } from "@/server/features/inventory/stock-service";
+import { transferDocument } from "@/server/features/inventory/stock-service";
 import { bookEvent, createCampaign, logCampaignTemplate, setCampaignActuals } from "@/server/features/marketing/marketing-service";
 import {
   createGreeningProject,
@@ -243,16 +243,20 @@ export async function postCountAction(countId: string): Promise<void> {
 export async function transferStockAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
-    await transferStock(actor, {
-      variantId: String(formData.get("variantId") ?? ""),
+    const postingKey = String(formData.get("postingKey") ?? crypto.randomUUID());
+    await transferDocument(actor, {
       fromLocationId: String(formData.get("fromLocationId") ?? ""),
       toLocationId: String(formData.get("toLocationId") ?? ""),
-      quantity: String(formData.get("quantity") ?? ""),
-      postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
+      postingKey,
+      lines: parseDocumentLines(String(formData.get("lines") ?? "")).map((line) => ({
+        variantId: line.variantId ?? "",
+        quantity: line.quantity,
+      })),
     });
     revalidatePath("/inventory");
-    return done("გადატანა გაიტარა");
+    redirect(`/inventory/movements?source=${encodeURIComponent(postingKey)}`);
   } catch (error) {
+    rethrowRedirect(error);
     return { ok: false, message: publicMessage(error) };
   }
 }

@@ -12,7 +12,7 @@ import { bookExcursion, cancelExcursion, completeExcursion, rescheduleExcursion,
 import { createInvoiceFromOrder, createInvoiceFromRental, postDraftInvoice, updateDraftInvoice } from "@/server/features/finance/invoice-service";
 import { recordPayment } from "@/server/features/finance/payment-service";
 import { confirmOpeningStock, confirmCustomerImport, dryRunCustomers, dryRunOpeningStock, dryRunProducts } from "@/server/features/import/import-service";
-import { postOpeningStock } from "@/server/features/inventory/stock-service";
+import { postOpeningDocument } from "@/server/features/inventory/stock-service";
 import { amendContract, billMaintenancePeriod, createMaintenanceContract, replaceCoveredPlant, setContractStatus } from "@/server/features/maintenance/maintenance-service";
 import { bookRental, createRentalAsset, deliverRental, returnRentalAssets } from "@/server/features/rental/rental-service";
 import {
@@ -297,17 +297,21 @@ export async function createVariantAction(_prev: ActionState, formData: FormData
 export async function openingStockAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
-    await postOpeningStock(actor, {
-      variantId: String(formData.get("variantId") ?? ""),
+    const postingKey = String(formData.get("postingKey") ?? crypto.randomUUID());
+    await postOpeningDocument(actor, {
       locationId: String(formData.get("locationId") ?? ""),
-      quantity: String(formData.get("quantity") ?? ""),
-      unitCost: String(formData.get("unitCost") ?? "0"),
-      postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
-      reason: "ხელით შეტანილი საწყისი ნაშთი",
+      postingKey,
+      note: String(formData.get("note") ?? ""),
+      lines: parseDocumentLines(String(formData.get("lines") ?? "")).map((line) => ({
+        variantId: line.variantId ?? "",
+        quantity: line.quantity,
+        unitCost: line.unitPrice ?? "0",
+      })),
     });
     revalidatePath("/inventory");
-    return done("ნაშთი გაიტარა");
+    redirect(`/inventory/movements?source=${encodeURIComponent(postingKey)}`);
   } catch (error) {
+    rethrowRedirect(error);
     return { ok: false, message: publicMessage(error) };
   }
 }

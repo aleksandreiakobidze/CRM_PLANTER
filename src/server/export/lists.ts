@@ -4,6 +4,7 @@ import { contains, getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
 import { customerFilterOptions, customerListFilters, customerListWhere, type CustomerListParams } from "@/server/features/crm/customer-list";
 import { listBalances } from "@/server/features/inventory/stock-service";
+import { listMovements, type MovementFilters } from "@/server/features/inventory/movement-journal";
 import { opsDashboard } from "@/server/features/reports/ops-reports";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
@@ -475,7 +476,55 @@ export async function reportsWorkbook(actor: Actor, fromIso: string, toIso: stri
   ], `${from} — ${to}`);
 }
 
+export async function movementsWorkbook(actor: Actor, filters: MovementFilters): Promise<ExportFile> {
+  const data = await listMovements(actor, filters, { all: true });
+  const columns: SheetSpec["columns"] = [
+    { header: "თარიღი", kind: "text", width: 18 },
+    { header: "ტიპი", kind: "text", width: 24 },
+    { header: "შიდა კოდი", kind: "text", width: 14 },
+    { header: "SKU", kind: "text", width: 16 },
+    { header: "დასახელება", kind: "text", width: 30 },
+    { header: "ლოკაცია", kind: "text", width: 18 },
+    { header: "რაოდენობა", kind: "qty", total: true },
+    ...(data.showCost ? [{ header: "ერთ. ღირებულება", kind: "cost" as const }, { header: "ღირებულება", kind: "money" as const, total: true }] : []),
+    { header: "დოკუმენტი", kind: "text", width: 24 },
+    { header: "მიზეზი", kind: "text", width: 28 },
+    { header: "ავტორი", kind: "text", width: 18 },
+  ];
+  return file("მარაგის მოძრაობა", "movements", [
+    {
+      name: "მოძრაობა",
+      columns,
+      rows: data.rows.map((row) => [
+        when(row.occurredAt),
+        row.typeLabel,
+        row.code,
+        row.sku,
+        row.name,
+        row.location,
+        excelNumber(row.quantity, 3),
+        ...(data.showCost ? [excelNumber(row.unitCost, 4), excelNumber(row.value, 2)] : []),
+        row.source.label,
+        row.reason ?? "",
+        row.actor ?? "",
+      ]),
+    },
+  ], [filters.from, filters.to].filter(Boolean).join(" — ") || undefined);
+}
+
+function movementFilters(url: URL): MovementFilters {
+  return {
+    from: url.searchParams.get("from") ?? undefined,
+    to: url.searchParams.get("to") ?? undefined,
+    locationId: url.searchParams.get("locationId") ?? undefined,
+    q: url.searchParams.get("q") ?? undefined,
+    type: url.searchParams.get("type") ?? undefined,
+    source: url.searchParams.get("source") ?? undefined,
+  };
+}
+
 const BUILDERS = {
+  movements: (actor: Actor, url: URL) => movementsWorkbook(actor, movementFilters(url)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
