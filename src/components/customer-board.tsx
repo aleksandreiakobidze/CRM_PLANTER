@@ -1,8 +1,9 @@
 "use client";
 
 import "leaflet/dist/leaflet.css";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, List, Map as MapIcon, MapPin, Phone } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { LayerGroup, Map as LeafletMap, Marker } from "leaflet";
 import { Pencil } from "@/components/icons";
@@ -12,18 +13,41 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { BadgeTone } from "@/server/labels";
 
-const PAGE = 10;
+const WIDE_QUERY = "(min-width: 1280px)";
+const STORE_KEY = "planter.customers.map";
 
-export type CustomerSpot = {
+type Sort = "name" | "priority" | "status" | "next";
+
+export type CustomerRow = {
+  id: string;
+  name: string;
+  type: string;
+  place: string;
+  phone: string;
+  tel: string;
+  status: string;
+  statusTone: BadgeTone;
+  priority: string;
+  priorityColor: string;
+  next: string;
+  overdue: boolean;
+  mapped: boolean;
+};
+
+export type CustomerPoint = {
   id: string;
   name: string;
   type: string;
   zone: string;
-  phone: string;
-  status: string;
-  statusTone: BadgeTone;
-  lat: number | null;
-  lng: number | null;
+  lat: number;
+  lng: number;
+};
+
+const SORT_LABEL: Record<Sort, string> = {
+  name: "სახელი",
+  priority: "პრიორიტეტი",
+  status: "სტატუსი",
+  next: "შემდეგი კონტაქტი",
 };
 
 type LeafletApi = typeof import("leaflet");
@@ -38,22 +62,57 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
-export function CustomerBoard({ customers }: { customers: CustomerSpot[] }) {
-  const [page, setPage] = useState(0);
+function storeKey(wide: boolean) {
+  return `${STORE_KEY}.${wide ? "wide" : "narrow"}`;
+}
+
+export function CustomerBoard({
+  rows,
+  points,
+  found,
+  from,
+  to,
+  prevHref,
+  nextHref,
+  sort,
+  dir,
+  sortLinks,
+}: {
+  rows: CustomerRow[];
+  points: CustomerPoint[];
+  found: number;
+  from: number;
+  to: number;
+  prevHref: string | null;
+  nextHref: string | null;
+  sort: Sort;
+  dir: "asc" | "desc";
+  sortLinks: Record<Sort, string>;
+}) {
+  const router = useRouter();
   const [selected, setSelected] = useState<string | null>(null);
+  const [wide, setWide] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const [ready, setReady] = useState(false);
   const [drawn, setDrawn] = useState(0);
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
   const markers = useRef(new Map<string, Marker>());
-  const pages = Math.max(1, Math.ceil(customers.length / PAGE));
-  const safePage = Math.min(page, pages - 1);
-  const start = safePage * PAGE;
-  const slice = customers.slice(start, start + PAGE);
-  const placed = customers.filter((customer) => customer.lat != null && customer.lng != null);
-  const from = customers.length === 0 ? 0 : start + 1;
-  const to = start + slice.length;
+  const fitted = useRef(false);
+  const boundsRef = useRef<[number, number][]>([]);
+
+  useEffect(() => {
+    const media = window.matchMedia(WIDE_QUERY);
+    const sync = () => {
+      setWide(media.matches);
+      const saved = window.localStorage.getItem(storeKey(media.matches));
+      setShowMap(saved ? saved === "1" : media.matches);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     const node = host.current;
@@ -82,7 +141,15 @@ export function CustomerBoard({ customers }: { customers: CustomerSpot[] }) {
     };
   }, []);
 
-  const pointsKey = customers.map((customer) => `${customer.id}:${customer.lat ?? ""}:${customer.lng ?? ""}`).join("|");
+  function fit(map: LeafletMap) {
+    const inGeorgia = boundsRef.current.filter(([lat, lng]) => lat > 40.9 && lat < 43.7 && lng > 39.9 && lng < 46.8);
+    const bounds = inGeorgia.length ? inGeorgia : boundsRef.current;
+    if (!host.current?.offsetWidth) return;
+    map.invalidateSize();
+    if (bounds.length === 1) map.setView(bounds[0], 14);
+    else if (bounds.length > 1) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 14 });
+    fitted.current = true;
+  }
 
   useEffect(() => {
     const map = mapRef.current;
@@ -94,33 +161,42 @@ export function CustomerBoard({ customers }: { customers: CustomerSpot[] }) {
       layer.clearLayers();
       markers.current.clear();
       const bounds: [number, number][] = [];
-      for (const customer of customers) {
-        if (customer.lat == null || customer.lng == null) continue;
-        const marker = leaflet.marker([customer.lat, customer.lng], {
-          title: customer.name,
+      for (const point of points) {
+        const marker = leaflet.marker([point.lat, point.lng], {
+          title: point.name,
           icon: leaflet.divIcon({ className: "map-pin", iconSize: [14, 14], iconAnchor: [7, 7] }),
         });
-        const detail = [customer.type, customer.zone].filter(Boolean).join(" · ");
+        const detail = [point.type, point.zone].filter(Boolean).join(" · ");
         marker.bindPopup(
-          `<strong>${escapeHtml(customer.name)}</strong>${detail ? `<div>${escapeHtml(detail)}</div>` : ""}<a href="/crm/customers/${customer.id}">გახსნა</a>`,
+          `<strong>${escapeHtml(point.name)}</strong>${detail ? `<div>${escapeHtml(detail)}</div>` : ""}<a href="/crm/customers/${point.id}">გახსნა</a>`,
         );
         marker.on("click", () => {
-          setSelected(customer.id);
-          const index = customers.findIndex((item) => item.id === customer.id);
-          if (index >= 0) setPage(Math.floor(index / PAGE));
+          setSelected(point.id);
+          document.getElementById(`customer-row-${point.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         });
         marker.addTo(layer);
-        markers.current.set(customer.id, marker);
-        bounds.push([customer.lat, customer.lng]);
+        markers.current.set(point.id, marker);
+        bounds.push([point.lat, point.lng]);
       }
-      if (bounds.length === 1) map.setView(bounds[0], 14);
-      else if (bounds.length > 1) map.fitBounds(bounds, { padding: [36, 36], maxZoom: 14 });
+      boundsRef.current = bounds;
+      fitted.current = false;
+      fit(map);
       setDrawn((value) => value + 1);
     });
     return () => {
       cancelled = true;
     };
-  }, [customers, pointsKey, ready]);
+  }, [points, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !showMap) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (!fitted.current) fit(map);
+      else map.invalidateSize();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [ready, showMap, wide]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -135,74 +211,207 @@ export function CustomerBoard({ customers }: { customers: CustomerSpot[] }) {
           iconSize: on ? [18, 18] : [14, 14],
           iconAnchor: on ? [9, 9] : [7, 7],
         }));
+        if (on) marker.setZIndexOffset(1000);
+        else marker.setZIndexOffset(0);
       }
-      const spot = customers.find((customer) => customer.id === selected && customer.lat != null && customer.lng != null);
-      if (spot?.lat != null && spot.lng != null) map.flyTo([spot.lat, spot.lng], 15, { duration: 0.55 });
+      const spot = points.find((point) => point.id === selected);
+      if (spot && host.current?.offsetWidth) {
+        map.invalidateSize();
+        map.flyTo([spot.lat, spot.lng], 15, { duration: 0.55 });
+        markers.current.get(spot.id)?.openPopup();
+      }
     });
     return () => {
       cancelled = true;
     };
-  }, [customers, ready, selected, drawn]);
+  }, [points, ready, selected, drawn, showMap]);
 
-  function choose(id: string) {
-    setSelected(id);
+  function changeMap(next: boolean) {
+    setShowMap(next);
+    window.localStorage.setItem(storeKey(wide), next ? "1" : "0");
   }
 
-  if (customers.length === 0) return null;
+  function locate(id: string) {
+    setSelected(id);
+    if (!showMap) changeMap(true);
+  }
+
+  function openRow(event: React.MouseEvent<HTMLElement>, id: string) {
+    if ((event.target as HTMLElement).closest("a, button")) return;
+    if (event.metaKey || event.ctrlKey) {
+      window.open(`/crm/customers/${id}`, "_blank");
+      return;
+    }
+    router.push(`/crm/customers/${id}`);
+  }
+
+  const pager = (
+    <div className="customer-pager">
+      <span className="tabular-nums">{from}–{to} / {found}</span>
+      {prevHref ? (
+        <Button asChild variant="secondary" size="icon" className="size-9">
+          <Link href={prevHref} aria-label="წინა გვერდი"><ChevronLeft size={18} /></Link>
+        </Button>
+      ) : (
+        <Button type="button" variant="secondary" size="icon" className="size-9" disabled aria-label="წინა გვერდი"><ChevronLeft size={18} /></Button>
+      )}
+      {nextHref ? (
+        <Button asChild variant="secondary" size="icon" className="size-9">
+          <Link href={nextHref} aria-label="შემდეგი გვერდი"><ChevronRight size={18} /></Link>
+        </Button>
+      ) : (
+        <Button type="button" variant="secondary" size="icon" className="size-9" disabled aria-label="შემდეგი გვერდი"><ChevronRight size={18} /></Button>
+      )}
+    </div>
+  );
+
+  function head(key: Sort, label = SORT_LABEL[key]) {
+    const on = sort === key;
+    const Icon = on ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+    return (
+      <th aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : undefined}>
+        <Link href={sortLinks[key]} className={cn("customer-sort", on && "on")} title={SORT_LABEL[key]}>
+          {label}
+          <Icon size={14} aria-hidden />
+        </Link>
+      </th>
+    );
+  }
 
   return (
-    <>
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4">
-          <p className="text-sm tabular-nums text-gray-500 dark:text-gray-400">{from}–{to} / {customers.length}</p>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" size="icon" aria-label="წინა ათეული" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>
-              <ChevronLeft size={18} />
+    <div className={cn("customer-board", showMap && "with-map")}>
+      <div className="customer-board-bar">
+        <label className="customer-sort-select">
+          <span className="customer-sort-caption">დალაგება</span>
+          <select
+            value={sort}
+            onChange={(event) => router.push(sortLinks[event.target.value as Sort])}
+          >
+            {(Object.keys(SORT_LABEL) as Sort[]).map((key) => (
+              <option key={key} value={key}>{SORT_LABEL[key]}</option>
+            ))}
+          </select>
+        </label>
+        <div className="customer-view-toggle" role="group" aria-label="ხედი">
+          {wide ? (
+            <Button type="button" variant="secondary" size="sm" aria-pressed={showMap} onClick={() => changeMap(!showMap)}>
+              <MapIcon size={16} aria-hidden />
+              {showMap ? "რუკის დამალვა" : "რუკის ჩვენება"}
             </Button>
-            <Button type="button" variant="secondary" size="icon" aria-label="შემდეგი ათეული" disabled={safePage >= pages - 1} onClick={() => setPage(safePage + 1)}>
-              <ChevronRight size={18} />
-            </Button>
-          </div>
-        </div>
-        <div className="divide-y divide-gray-200 dark:divide-gray-800">
-          {slice.map((customer) => (
-            <div
-              key={customer.id}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5",
-                customer.id === selected && "bg-brand-50 dark:bg-brand-500/12",
-              )}
-            >
-              <button
-                type="button"
-                className="flex min-h-14 min-w-0 flex-1 items-center justify-between gap-4 rounded-xl bg-transparent px-2 py-2 text-left font-medium whitespace-normal text-gray-800 hover:bg-gray-50 dark:text-white/90 dark:hover:bg-white/[0.03]"
-                aria-pressed={customer.id === selected}
-                onClick={() => choose(customer.id)}
-              >
-                <span className="grid min-w-0 gap-0.5">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <strong className="font-medium">{customer.name}</strong>
-                    <Badge variant={customer.statusTone}>{customer.status}</Badge>
-                  </span>
-                  <small className="text-xs font-normal text-gray-500 dark:text-gray-400">
-                    {[customer.type, customer.zone].filter(Boolean).join(" · ") || "—"}
-                  </small>
-                </span>
-                <span className="shrink-0 text-sm font-normal tabular-nums text-gray-500 dark:text-gray-400">{customer.phone}</span>
-              </button>
-              <Button asChild variant="ghost" size="icon" className="mr-1 size-9 shrink-0 text-gray-500">
-                <Link href={`/crm/customers/${customer.id}/edit`} aria-label={`${customer.name} — რედაქტირება`} title="რედაქტირება">
-                  <Pencil size={16} />
-                </Link>
+          ) : (
+            <>
+              <Button type="button" variant="secondary" size="sm" className={cn(!showMap && "on")} aria-pressed={!showMap} onClick={() => changeMap(false)}>
+                <List size={16} aria-hidden />
+                სია
               </Button>
-            </div>
-          ))}
+              <Button type="button" variant="secondary" size="sm" className={cn(showMap && "on")} aria-pressed={showMap} onClick={() => changeMap(true)}>
+                <MapIcon size={16} aria-hidden />
+                რუკა
+              </Button>
+            </>
+          )}
         </div>
+      </div>
+
+      <Card className="customer-list-card overflow-hidden">
+        <div className="customer-list-head">{pager}</div>
+        <table className="customer-table">
+          <thead>
+            <tr>
+              {head("name")}
+              <th className="col-place">ზონა / ქალაქი</th>
+              <th>ტელეფონი</th>
+              {head("status")}
+              {head("next", "კონტაქტი")}
+              <th className="w-0"><span className="sr-only">მოქმედება</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.id}
+                id={`customer-row-${row.id}`}
+                className={cn(row.id === selected && "on")}
+                onClick={(event) => openRow(event, row.id)}
+              >
+                <td className="customer-name-cell">
+                  <span className="customer-name-line">
+                    {row.priority ? <span className="customer-priority" style={{ color: row.priorityColor, borderColor: row.priorityColor }} title={`პრიორიტეტი ${row.priority}`}>{row.priority}</span> : null}
+                    <Link href={`/crm/customers/${row.id}`} className="customer-name">{row.name}</Link>
+                  </span>
+                  <small>{row.type || "—"}{row.place ? <span className="place-inline"> · {row.place}</span> : null}</small>
+                </td>
+                <td className="col-place text-gray-600 dark:text-gray-300">{row.place || "—"}</td>
+                <td className="customer-phone-cell tabular-nums">
+                  {row.tel ? <a href={`tel:${row.tel}`} className="customer-tel">{row.phone}</a> : <span className="text-gray-400">—</span>}
+                </td>
+                <td><Badge variant={row.statusTone}>{row.status}</Badge></td>
+                <td className={cn("whitespace-nowrap tabular-nums", row.overdue ? "font-medium text-error-600 dark:text-error-500" : "text-gray-600 dark:text-gray-300")}>
+                  {row.next || <span className="text-gray-400">—</span>}
+                </td>
+                <td>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-9 text-gray-500"
+                      disabled={!row.mapped}
+                      aria-label={`${row.name} — რუკაზე ჩვენება`}
+                      title={row.mapped ? "რუკაზე ჩვენება" : "კოორდინატი არ არის"}
+                      onClick={() => locate(row.id)}
+                    >
+                      <MapPin size={16} />
+                    </Button>
+                    <Button asChild variant="ghost" size="icon" className="size-9 text-gray-500">
+                      <Link href={`/crm/customers/${row.id}/edit`} aria-label={`${row.name} — რედაქტირება`} title="რედაქტირება">
+                        <Pencil size={16} />
+                      </Link>
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <ul className="customer-cards">
+          {rows.map((row) => (
+            <li key={row.id} className={cn(row.id === selected && "on")}>
+              <Link href={`/crm/customers/${row.id}`} className="customer-card-main">
+                <span className="customer-card-title">
+                  <strong>{row.name}</strong>
+                  {row.priority ? <span className="customer-priority" style={{ color: row.priorityColor, borderColor: row.priorityColor }}>{row.priority}</span> : null}
+                </span>
+                <small>{[row.type, row.place].filter(Boolean).join(" · ") || "—"}</small>
+                <span className="customer-card-meta">
+                  <Badge variant={row.statusTone}>{row.status}</Badge>
+                  {row.next ? <span className={cn("tabular-nums", row.overdue && "font-medium text-error-600 dark:text-error-500")}>{row.next}</span> : null}
+                </span>
+              </Link>
+              <div className="customer-card-actions">
+                {row.tel ? (
+                  <a href={`tel:${row.tel}`} className="customer-call" aria-label={`${row.name} — დარეკვა ${row.phone}`}>
+                    <Phone size={18} />
+                  </a>
+                ) : null}
+                {row.mapped ? (
+                  <button type="button" className="customer-card-icon" aria-label={`${row.name} — რუკაზე ჩვენება`} onClick={() => locate(row.id)}>
+                    <MapPin size={18} />
+                  </button>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="customer-list-foot">{pager}</div>
       </Card>
+
       <Card className="customer-map p-3">
         <div ref={host} />
         <div className="mt-2.5 flex items-center justify-between gap-3 px-1">
-          <p className="text-sm tabular-nums text-gray-500 dark:text-gray-400">რუკაზე {placed.length} / {customers.length}</p>
+          <p className="text-sm tabular-nums text-gray-500 dark:text-gray-400">რუკაზე {points.length} / {found}</p>
           {selected ? (
             <Link className="text-sm font-medium text-brand-500 hover:text-brand-600" href={`/crm/customers/${selected}`}>
               გახსნა
@@ -210,6 +419,6 @@ export function CustomerBoard({ customers }: { customers: CustomerSpot[] }) {
           ) : null}
         </div>
       </Card>
-    </>
+    </div>
   );
 }

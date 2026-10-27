@@ -13,7 +13,45 @@ export type CustomerListParams = {
   phone?: string;
   web?: string;
   verified?: string;
+  sort?: string;
+  dir?: string;
+  page?: string;
 };
+
+export const CUSTOMER_PAGE_SIZE = 25;
+export const CUSTOMER_SORTS = ["name", "priority", "status", "next"] as const;
+export type CustomerSort = (typeof CUSTOMER_SORTS)[number];
+export type CustomerListView = { sort: CustomerSort; dir: "asc" | "desc"; page: number };
+
+export function customerListView(params: CustomerListParams): CustomerListView {
+  const sort = (CUSTOMER_SORTS as readonly string[]).includes(params.sort ?? "") ? (params.sort as CustomerSort) : "priority";
+  const dir = params.dir === "desc" ? "desc" : "asc";
+  const page = Math.max(1, Math.floor(Number(params.page) || 1));
+  return { sort, dir, page };
+}
+
+export function customerOrderBy(view: CustomerListView): Prisma.CustomerOrderByWithRelationInput[] {
+  const { dir } = view;
+  if (view.sort === "name") return [{ name: dir }, { id: "asc" }];
+  if (view.sort === "status") return [{ relationshipStatus: dir }, { name: "asc" }, { id: "asc" }];
+  if (view.sort === "next") return [{ nextContactOn: { sort: dir, nulls: "last" } }, { name: "asc" }, { id: "asc" }];
+  return [{ priority: { sort: dir, nulls: "last" } }, { name: "asc" }, { id: "asc" }];
+}
+
+export async function customerStatusCounts(organizationId: string, filters: CustomerListFilters) {
+  const rows = await getDb().customer.groupBy({
+    by: ["relationshipStatus"],
+    where: customerListWhere(organizationId, { ...filters, status: "" }),
+    _count: { _all: true },
+  });
+  const counts: Record<string, number> = {};
+  let all = 0;
+  for (const row of rows) {
+    counts[row.relationshipStatus] = row._count._all;
+    all += row._count._all;
+  }
+  return { all, counts };
+}
 
 export type CustomerListFilters = {
   q: string;
