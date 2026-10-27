@@ -1865,3 +1865,16 @@ button.cal-chip:hover { filter: brightness(0.97); }
   .docv-totals > div { min-width: 0; }
 }
 .docv-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.docv-timeline { list-style: none; display: grid; gap: 0; padding: 0; }
+.docv-timeline li { position: relative; display: grid; gap: 2px; padding: 0 0 14px 20px; border-left: 2px solid var(--color-border); margin-left: 5px; }
+.docv-timeline li:last-child { padding-bottom: 0; border-left-color: transparent; }
+.docv-timeline li::before { content: ""; position: absolute; left: -7px; top: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--color-card); border: 2px solid var(--color-primary); }
+.docv-timeline strong { font-size: 14px; font-weight: 600; color: var(--color-foreground); }
+.docv-timeline span { font-size: 12px; color: var(--color-muted-foreground); }
+.doc-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.doc-tabs a { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-card); color: var(--color-foreground); font-size: 14px; text-decoration: none; }
+.doc-tabs a[aria-current="page"] { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.doc-tabs a span { font-size: 12px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.doc-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.doc-filters label { display: grid; gap: 4px; font-size: 12px; color: var(--color-muted-foreground); min-width: 200px; flex: 1 1 200px; }
+.doc-filters button { min-height: 44px; }

@@ -61,7 +61,7 @@ export function DocumentLines({
         rows.map(({ kind, itemId, description, quantity, unitPrice, discountAmount }) => ({
           kind,
           itemId,
-          description,
+          description: kind === "item" ? "" : description,
           quantity,
           unitPrice,
           discountAmount,

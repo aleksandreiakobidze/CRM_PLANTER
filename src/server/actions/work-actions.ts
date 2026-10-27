@@ -15,7 +15,16 @@ import { confirmOpeningStock, confirmCustomerImport, dryRunCustomers, dryRunOpen
 import { postOpeningStock } from "@/server/features/inventory/stock-service";
 import { amendContract, billMaintenancePeriod, createMaintenanceContract, replaceCoveredPlant, setContractStatus } from "@/server/features/maintenance/maintenance-service";
 import { bookRental, createRentalAsset, deliverRental, returnRentalAssets } from "@/server/features/rental/rental-service";
-import { cancelOrder, confirmOrder, convertQuoteToOrder, createQuote, fulfillOrder } from "@/server/features/sales/order-service";
+import {
+  cancelOrder,
+  confirmOrder,
+  convertQuoteToOrder,
+  createQuote,
+  fulfillOrder,
+  parseDocumentLines,
+  setQuoteStatus,
+  updateQuote,
+} from "@/server/features/sales/order-service";
 import { BusinessError, publicMessage } from "@/server/errors";
 import { getDb } from "@/server/db";
 import { rethrowRedirect, type ActionState } from "@/server/actions/state";
@@ -303,30 +312,45 @@ export async function openingStockAction(_prev: ActionState, formData: FormData)
   }
 }
 
+function quoteInput(formData: FormData) {
+  return {
+    customerId: String(formData.get("customerId") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+    validUntil: String(formData.get("validUntil") ?? ""),
+    lines: parseDocumentLines(String(formData.get("lines") ?? "")),
+  };
+}
+
 export async function createQuoteAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
-    const rawLines = String(formData.get("lines") ?? "");
-    const { parseDocumentLines } = await import("@/server/features/sales/order-service");
-    const quote = await createQuote(actor, {
-      customerId: String(formData.get("customerId") ?? ""),
-      notes: String(formData.get("notes") ?? ""),
-      lines: rawLines
-        ? parseDocumentLines(rawLines)
-        : [
-            {
-              variantId: String(formData.get("variantId") ?? ""),
-              quantity: String(formData.get("quantity") ?? ""),
-              unitPrice: String(formData.get("unitPrice") ?? "") || undefined,
-              discountAmount: String(formData.get("discountAmount") ?? "0"),
-            },
-          ],
-    });
+    const quote = await createQuote(actor, quoteInput(formData));
+    revalidatePath("/sales/quotes");
     redirect(`/sales/quotes/${quote.id}`);
   } catch (error) {
     rethrowRedirect(error);
     return { ok: false, message: publicMessage(error) };
   }
+}
+
+export async function updateQuoteAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    const quoteId = String(formData.get("quoteId") ?? "");
+    await updateQuote(actor, quoteId, quoteInput(formData));
+    revalidatePath(`/sales/quotes/${quoteId}`);
+    redirect(`/sales/quotes/${quoteId}`);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function setQuoteStatusAction(quoteId: string, status: "sent" | "accepted" | "declined" | "draft"): Promise<void> {
+  const actor = await getActor();
+  await setQuoteStatus(actor, quoteId, status);
+  revalidatePath(`/sales/quotes/${quoteId}`);
+  revalidatePath("/sales/quotes");
 }
 
 export async function convertQuoteAction(quoteId: string): Promise<void> {

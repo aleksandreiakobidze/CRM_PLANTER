@@ -85,6 +85,7 @@ async function prepareLines(tx: Tx, organizationId: string, lines: DraftLine[]) 
       });
       continue;
     }
+    if (!line.variantId) throw new BusinessError("აითემის ხაზს აითემი არ აქვს არჩეული", "validation");
     const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId } });
     if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
     const unitPrice = line.unitPrice ? D(line.unitPrice) : await resolveUnitPrice(tx, organizationId, variant.id, quantity);
@@ -123,7 +124,13 @@ async function resolveUnitPrice(tx: Tx, organizationId: string, variantId: strin
   return D(variant.listPrice);
 }
 
-export async function createQuote(actor: Actor, input: { customerId: string; notes?: string; lines: DraftLine[] }) {
+type QuoteInput = { customerId: string; notes?: string; validUntil?: string; lines: DraftLine[] };
+
+function optionalDate(value?: string) {
+  return value?.trim() ? orderDate(value) : null;
+}
+
+export async function createQuote(actor: Actor, input: QuoteInput) {
   requirePermission(actor, "sales.write");
   if (input.lines.length === 0) throw new BusinessError("შეთავაზებას ერთი ხაზი მაინც სჭირდება", "validation");
   return withTx(async (tx) => {
@@ -137,13 +144,62 @@ export async function createQuote(actor: Actor, input: { customerId: string; not
         number,
         customerId: customer.id,
         notes: input.notes,
+        validUntil: optionalDate(input.validUntil),
         createdById: actor.userId,
-        lines: { create: prepared },
+        lines: { create: prepared.map((line, sort) => ({ ...line, sort })) },
       },
       include: { lines: true },
     });
     await audit(tx, actor, "quote.create", "quote", quote.id, undefined, { number: quote.number });
     return quote;
+  });
+}
+
+export const QUOTE_EDITABLE = new Set(["draft", "sent"]);
+
+export async function updateQuote(actor: Actor, quoteId: string, input: QuoteInput) {
+  requirePermission(actor, "sales.write");
+  if (input.lines.length === 0) throw new BusinessError("შეთავაზებას ერთი ხაზი მაინც სჭირდება", "validation");
+  return withTx(async (tx) => {
+    const quote = await tx.quote.findFirst({ where: { id: quoteId, organizationId: actor.organizationId } });
+    if (!quote) throw new BusinessError("შეთავაზება ვერ მოიძებნა", "not_found");
+    if (!QUOTE_EDITABLE.has(quote.status)) throw new BusinessError("ამ სტატუსში შეთავაზების შეცვლა აღარ შეიძლება", "conflict");
+    const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
+    if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
+    const prepared = await prepareLines(tx, actor.organizationId, input.lines);
+    await tx.quoteLine.deleteMany({ where: { quoteId: quote.id } });
+    const updated = await tx.quote.update({
+      where: { id: quote.id },
+      data: {
+        customerId: customer.id,
+        notes: input.notes,
+        validUntil: optionalDate(input.validUntil),
+        lines: { create: prepared.map((line, sort) => ({ ...line, sort })) },
+      },
+      include: { lines: true },
+    });
+    await audit(tx, actor, "quote.update", "quote", quote.id, { customerId: quote.customerId }, { customerId: customer.id, lines: prepared.length });
+    return updated;
+  });
+}
+
+const QUOTE_TRANSITIONS: Record<string, string[]> = {
+  sent: ["draft"],
+  accepted: ["draft", "sent"],
+  declined: ["draft", "sent"],
+  draft: ["declined"],
+};
+
+export async function setQuoteStatus(actor: Actor, quoteId: string, status: "sent" | "accepted" | "declined" | "draft") {
+  requirePermission(actor, "sales.write");
+  return withTx(async (tx) => {
+    const quote = await tx.quote.findFirst({ where: { id: quoteId, organizationId: actor.organizationId } });
+    if (!quote) throw new BusinessError("შეთავაზება ვერ მოიძებნა", "not_found");
+    if (quote.status === status) return quote;
+    if (!QUOTE_TRANSITIONS[status]?.includes(quote.status)) throw new BusinessError("სტატუსის ეს ცვლილება დაუშვებელია", "conflict");
+    const updated = await tx.quote.update({ where: { id: quote.id }, data: { status } });
+    await audit(tx, actor, `quote.${status}`, "quote", quote.id, { status: quote.status }, { status });
+    return updated;
   });
 }
 
@@ -167,6 +223,7 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
     include: { lines: true },
   });
   if (!quote) throw new BusinessError("შეთავაზება ვერ მოიძებნა", "not_found");
+  if (quote.status === "declined") throw new BusinessError("უარყოფილი შეთავაზება შეკვეთად ვერ გარდაიქმნება", "conflict");
   if (quote.lines.some((line) => isStockLine(line.kind) && !line.variantId)) {
     throw new BusinessError("შეთავაზების აითემს ვარიანტი აკლია", "validation");
   }
@@ -196,6 +253,7 @@ async function convertQuoteTx(tx: Tx, actor: Actor, quoteId: string) {
   });
   await tx.quote.update({ where: { id: quote.id }, data: { status: "converted" } });
   await audit(tx, actor, "quote.convert", "sales_order", order.id, undefined, { quoteId });
+  await audit(tx, actor, "quote.converted", "quote", quote.id, { status: quote.status }, { status: "converted", orderId: order.id });
   return order;
 }
 
