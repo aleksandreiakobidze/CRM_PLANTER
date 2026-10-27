@@ -9,7 +9,7 @@ import { addPlaceTerm, deletePlaceTerm } from "@/server/features/crm/place-terms
 import { setMemberRole } from "@/server/features/admin/team-service";
 import { addActivity, addAddress, addContact, cancelTask, completeAssignment, createCustomer, createTask, reopenTask, rescheduleTask, setTaskStatus, updateCustomer } from "@/server/features/crm/customer-service";
 import { bookExcursion, cancelExcursion, completeExcursion, rescheduleExcursion, rescheduleExcursionToDate } from "@/server/features/excursions/excursion-service";
-import { createInvoiceFromOrder, createInvoiceFromRental } from "@/server/features/finance/invoice-service";
+import { createInvoiceFromOrder, createInvoiceFromRental, postDraftInvoice, updateDraftInvoice } from "@/server/features/finance/invoice-service";
 import { recordPayment } from "@/server/features/finance/payment-service";
 import { confirmOpeningStock, confirmCustomerImport, dryRunCustomers, dryRunOpeningStock, dryRunProducts } from "@/server/features/import/import-service";
 import { postOpeningStock } from "@/server/features/inventory/stock-service";
@@ -387,6 +387,42 @@ export async function invoiceRentalAction(bookingId: string): Promise<void> {
   const actor = await getActor();
   const invoice = await createInvoiceFromRental(actor, bookingId);
   redirect(`/finance/invoices/${invoice.id}`);
+}
+
+export async function updateDraftInvoiceAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    const invoiceId = String(formData.get("invoiceId") ?? "");
+    await updateDraftInvoice(actor, invoiceId, {
+      customerId: String(formData.get("customerId") ?? ""),
+      dueOn: String(formData.get("dueOn") ?? ""),
+      lines: parseDocumentLines(String(formData.get("lines") ?? "")).map((line) => ({
+        variantId: line.kind === "item" ? line.variantId : undefined,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discountAmount: line.discountAmount,
+      })),
+    });
+    revalidatePath(`/finance/invoices/${invoiceId}`);
+    redirect(`/finance/invoices/${invoiceId}`);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function postDraftInvoiceAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    const invoiceId = String(formData.get("invoiceId") ?? "");
+    await postDraftInvoice(actor, invoiceId);
+    revalidatePath(`/finance/invoices/${invoiceId}`);
+    revalidatePath("/finance/invoices");
+    return done("ინვოისი გატარდა");
+  } catch (error) {
+    return { ok: false, message: publicMessage(error) };
+  }
 }
 
 export async function paymentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

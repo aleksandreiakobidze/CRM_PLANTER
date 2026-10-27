@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { DocTabs } from "@/components/doc-tabs";
+import { DocFacts, DocHeader, DocLines, docDate, docMoney } from "@/components/doc-view";
 import { HeaderLinesForm } from "@/components/header-lines-form";
 import { customerOption } from "@/lib/customer-option";
 import { variantLabel } from "@/lib/variant-label";
@@ -12,7 +13,7 @@ import { cancelOrderAction, confirmOrderAction, invoiceOrderAction } from "@/ser
 import { completeSaleAction, retrySaleAction, updateOpenOrderAction } from "@/server/actions/waybill-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
-import { orderStatusLabel } from "@/server/labels";
+import { docStatus } from "@/server/labels";
 import { isLineKind, isStockLine, LINE_KIND_LABEL } from "@/server/features/sales/line-kinds";
 import { D } from "@/server/money";
 import { formatDateOnly, tbilisiDateString } from "@/server/time";
@@ -21,17 +22,6 @@ function dateOnly(value: Date | null): string {
   if (!value) return "";
   return value.toISOString().slice(0, 10);
 }
-
-const BADGE: Record<string, string> = {
-  open: "stone-badge",
-  draft: "stone-badge",
-  authorized: "warn-badge",
-  confirmed: "warn-badge",
-  completed: "ok-badge",
-  fulfilled: "ok-badge",
-  rs_error: "err-badge",
-  cancelled: "stone-badge",
-};
 
 export default async function OrderPage({
   params,
@@ -53,6 +43,10 @@ export default async function OrderPage({
     getDb().productVariant.findMany({ where: { organizationId: actor.organizationId, active: true }, orderBy: { sku: "asc" } }),
   ]);
   if (!order) notFound();
+  const variantIds = order.lines.map((line) => line.variantId).filter((value): value is string => Boolean(value));
+  const codeOf = new Map(
+    variants.filter((variant) => variantIds.includes(variant.id)).map((variant) => [variant.id, variant.internalCode ?? variant.sku]),
+  );
   const fulfillment = order.fulfillments[0];
   const issued = order.status === "completed" || order.status === "rs_error" || order.status === "fulfilled";
   const open = order.status === "open" || order.status === "draft";
@@ -77,17 +71,14 @@ export default async function OrderPage({
   };
   return (
     <section className="grid doc">
-      <div className="doc-head">
-        <div className="page-head">
-          <Link className="back" href="/sales/orders">შეკვეთები</Link>
-          <h1>{order.number}</h1>
-          <p>{order.customer.name}</p>
-        </div>
-        <div className="doc-side">
-          <span className={`badge ${BADGE[order.status] ?? "stone-badge"}`}>{orderStatusLabel(order.status)}</span>
-          <p className="doc-total">{total.toFixed(2)} ₾</p>
-        </div>
-      </div>
+      <DocHeader
+        back={{ href: "/sales/orders", label: "შეკვეთები" }}
+        title={order.number}
+        status={docStatus("order", order.status)}
+        subtitle={<Link href={`/crm/customers/${order.customerId}`}>{order.customer.name}</Link>}
+        actions={<p className="doc-total">{docMoney(total, order.currency)}</p>}
+      />
+      {!open ? <p className="docv-locked">{issued ? "მარაგი ჩამოწერილია — შეკვეთა დაკეტილია." : "ავტორიზებული შეკვეთის ხაზები აღარ იცვლება."}</p> : null}
       <DocTabs label="დოკუმენტის ტაბები" tabs={tabs} current={tab} />
       {tab === "order" ? (
         <div className="card doc-card">
@@ -118,24 +109,42 @@ export default async function OrderPage({
               }
             />
           ) : (
-            <>
-              <table>
-                <thead><tr><th>ტიპი</th><th>დასახელება</th><th>რაოდენობა</th><th>ფასი</th><th>ჯამი</th></tr></thead>
-                <tbody>
-                  {order.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td>{isLineKind(line.kind) ? LINE_KIND_LABEL[line.kind] : line.kind}</td>
-                      <td>{line.description}</td>
-                      <td>{line.quantity.toString()}</td>
-                      <td>{line.unitPrice.toString()}</td>
-                      <td>{line.lineTotal.toString()} ₾</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="note">თარიღი: {formatDateOnly(order.orderedOn)}</p>
-              {order.notes ? <p className="note">{order.notes}</p> : null}
-            </>
+            <div className="grid">
+              <DocFacts
+                items={[
+                  { label: "თარიღი", value: docDate(order.orderedOn) },
+                  { label: "ხაზები", value: String(order.lines.length) },
+                  { label: "შენიშვნა", value: order.notes || "—" },
+                ]}
+              />
+              <DocLines
+                columns={[
+                  { key: "item", header: "დასახელება" },
+                  { key: "qty", header: "რაოდენობა", align: "right" },
+                  { key: "price", header: "ფასი", align: "right" },
+                  { key: "discount", header: "ფასდაკლება", align: "right" },
+                  { key: "total", header: "ჯამი", align: "right" },
+                ]}
+                rows={order.lines.map((line) => ({
+                  id: line.id,
+                  cells: {
+                    item: (
+                      <>
+                        {line.description}
+                        <span className="docv-code">
+                          {line.variantId ? codeOf.get(line.variantId) : isLineKind(line.kind) ? LINE_KIND_LABEL[line.kind] : line.kind}
+                        </span>
+                      </>
+                    ),
+                    qty: line.quantity.toString(),
+                    price: docMoney(line.unitPrice, order.currency),
+                    discount: D(line.discountAmount).gt(0) ? docMoney(line.discountAmount, order.currency) : "—",
+                    total: docMoney(line.lineTotal, order.currency),
+                  },
+                }))}
+                totals={[{ label: "ჯამი", value: docMoney(total, order.currency), strong: true }]}
+              />
+            </div>
           )}
           <div className="doc-actions">
             {open ? <form action={confirmOrderAction.bind(null, order.id)}><button type="submit">ავტორიზება</button></form> : null}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { DocFacts, DocHeader, DocLines, DocSection, docDate, docMoney } from "@/components/doc-view";
+import { PostingForm } from "@/components/posting-form";
 import { landedCostAction, receivePurchaseAction, submitPurchaseAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -95,7 +96,12 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
       />
       {receiving && open.length > 0 ? (
         <DocSection title="მიღება საწყობში">
-          <BoundForm action={receivePurchaseAction} label="მიღების გატარება">
+          <PostingForm
+            action={receivePurchaseAction}
+            label="მიღების გატარება"
+            summary={[{ label: "შესყიდვა", value: `${order.number} · ${order.supplier.name}` }]}
+            pickLabels={{ locationId: "ლოკაცია" }}
+          >
             <input type="hidden" name="purchaseOrderId" value={order.id} />
             <input type="hidden" name="postingKey" value={crypto.randomUUID()} />
             <label>ლოკაცია
@@ -117,7 +123,7 @@ export default async function PurchasePage({ params }: { params: Promise<{ id: s
               </tbody>
             </table>
             <p className="muted">ნული ან ცარიელი ველი ამ ხაზს არ მიიღებს. გატარება ზრდის ნაშთს და თვითღირებულებას.</p>
-          </BoundForm>
+          </PostingForm>
         </DocSection>
       ) : null}
       <div className="docv-grid">

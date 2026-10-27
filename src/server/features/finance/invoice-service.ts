@@ -1,5 +1,6 @@
 import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
+import { audit } from "@/server/audit";
 import { getDb, type Tx } from "@/server/db";
 import { BusinessError, isUniqueViolation } from "@/server/errors";
 import { D, Decimal, moneyPrint, moneyText, priceFromTarget, roundMoney } from "@/server/money";
@@ -207,7 +208,7 @@ export async function createManualInvoice(
     sourceType: string;
     sourceId: string;
     currency?: string;
-    lines: { description: string; quantity: Decimal; unitPrice: Decimal; discountAmount?: Decimal; lineTotal: Decimal; variantId?: string }[];
+    lines: PricedLine[];
     adjustment?: Decimal;
     buyerAddress?: string | null;
     forceDraft?: boolean;
@@ -242,19 +243,62 @@ async function insertInvoice(
     buyerAddress: string | null;
     adjustment?: Decimal;
     forceDraft?: boolean;
-    lines: { description: string; quantity: Decimal; unitPrice: Decimal; discountAmount?: Decimal; lineTotal: Decimal; variantId?: string }[];
+    lines: PricedLine[];
   },
 ) {
-  const organization = await tx.organization.findUniqueOrThrow({ where: { id: actor.organizationId } });
+  const priced = await priceInvoice(tx, actor.organizationId, input);
+  const blocker = input.forceDraft ? "ავტომატური გატარება გამორთულია" : requisitesReady(priced.organization);
+  const { subtotal, tax, total, snapshot, issuedOn } = priced;
+  const number = blocker ? null : await nextNumber(tx, actor.organizationId, "invoice", "INV");
+  return tx.invoice.create({
+    data: {
+      organizationId: actor.organizationId,
+      number,
+      customerId: priced.customer.id,
+      orderId: input.orderId,
+      status: blocker ? "draft" : "posted",
+      currency: input.currency,
+      subtotal: subtotal.toFixed(2),
+      taxTotal: tax.toFixed(2),
+      total: total.toFixed(2),
+      issuedOn: blocker ? null : parseDate(issuedOn),
+      dueOn: blocker ? null : parseDate(issuedOn),
+      postingKey: input.postingKey,
+      ...(blocker ? {} : { snapshot }),
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      draftReason: blocker,
+      lines: {
+        create: input.lines.map((line, index) => ({
+          variantId: line.variantId,
+          description: line.description,
+          quantity: line.quantity.toFixed(3),
+          unitPrice: line.unitPrice.toFixed(4),
+          discountAmount: (line.discountAmount ?? D("0")).toFixed(2),
+          lineTotal: line.lineTotal.toFixed(2),
+          sort: index,
+        })),
+      },
+    },
+  });
+}
+
+type PricedLine = { description: string; quantity: Decimal; unitPrice: Decimal; discountAmount?: Decimal; lineTotal: Decimal; variantId?: string | null };
+
+async function priceInvoice(
+  tx: Tx,
+  organizationId: string,
+  input: { customerId: string; currency: string; buyerAddress: string | null; adjustment?: Decimal; lines: PricedLine[] },
+) {
+  const organization = await tx.organization.findUniqueOrThrow({ where: { id: organizationId } });
   const customer = await tx.customer.findFirstOrThrow({
-    where: { id: input.customerId, organizationId: actor.organizationId },
+    where: { id: input.customerId, organizationId },
     include: { addresses: true },
   });
   const adjustment = input.adjustment ?? D("0");
   const subtotal = roundMoney(input.lines.reduce((sum, line) => sum.plus(line.lineTotal), D("0")).plus(adjustment));
   const tax = organization.taxMode === "exclusive" ? roundMoney(subtotal.mul(D(organization.taxRate))) : D("0");
   const total = roundMoney(subtotal.plus(tax));
-  const blocker = input.forceDraft ? "ავტომატური გატარება გამორთულია" : requisitesReady(organization);
   const issuedOn = tbilisiDateString();
   const snapshot: InvoiceSnapshot = {
     seller: {
@@ -290,37 +334,116 @@ async function insertInvoice(
     taxMode: organization.taxMode,
     fiscalNote: "ეს არ არის RS-ზე რეგისტრირებული საგადასახადო დოკუმენტი.",
   };
-  const number = blocker ? null : await nextNumber(tx, actor.organizationId, "invoice", "INV");
-  return tx.invoice.create({
-    data: {
-      organizationId: actor.organizationId,
-      number,
-      customerId: customer.id,
-      orderId: input.orderId,
-      status: blocker ? "draft" : "posted",
-      currency: input.currency,
-      subtotal: subtotal.toFixed(2),
-      taxTotal: tax.toFixed(2),
-      total: total.toFixed(2),
-      issuedOn: blocker ? null : parseDate(issuedOn),
-      dueOn: blocker ? null : parseDate(issuedOn),
-      postingKey: input.postingKey,
-      ...(blocker ? {} : { snapshot }),
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      draftReason: blocker,
-      lines: {
-        create: input.lines.map((line, index) => ({
-          variantId: line.variantId,
-          description: line.description,
-          quantity: line.quantity.toFixed(3),
-          unitPrice: line.unitPrice.toFixed(4),
-          discountAmount: (line.discountAmount ?? D("0")).toFixed(2),
-          lineTotal: line.lineTotal.toFixed(2),
-          sort: index,
-        })),
+  return { organization, customer, subtotal, tax, total, snapshot, issuedOn };
+}
+
+async function loadDraft(tx: Tx, organizationId: string, invoiceId: string) {
+  const invoice = await tx.invoice.findFirst({ where: { id: invoiceId, organizationId }, include: { lines: { orderBy: { sort: "asc" } } } });
+  if (!invoice) throw new BusinessError("ინვოისი ვერ მოიძებნა", "not_found");
+  if (invoice.status !== "draft") throw new BusinessError("გატარებული ინვოისის შეცვლა აღარ შეიძლება", "invalid_state");
+  return invoice;
+}
+
+export type InvoiceDraftLine = { variantId?: string; description?: string; quantity: string; unitPrice?: string; discountAmount?: string };
+
+export async function updateDraftInvoice(
+  actor: Actor,
+  invoiceId: string,
+  input: { customerId: string; dueOn?: string; lines: InvoiceDraftLine[] },
+) {
+  requirePermission(actor, "finance.write");
+  if (input.lines.length === 0) throw new BusinessError("ინვოისს ერთი ხაზი მაინც სჭირდება", "validation");
+  return withTx(async (tx) => {
+    const invoice = await loadDraft(tx, actor.organizationId, invoiceId);
+    const customer = await tx.customer.findFirst({ where: { id: input.customerId, organizationId: actor.organizationId, mergedIntoId: null } });
+    if (!customer) throw new BusinessError("კლიენტი ვერ მოიძებნა", "not_found");
+    const lines = [];
+    for (const line of input.lines) {
+      const quantity = D(line.quantity || "0");
+      if (quantity.lte(0)) throw new BusinessError("რაოდენობა ნულზე მეტი უნდა იყოს", "validation");
+      if (!line.unitPrice?.trim()) throw new BusinessError("ხაზს ფასი სჭირდება", "validation");
+      const unitPrice = D(line.unitPrice);
+      const discount = D(line.discountAmount || "0");
+      let variantId: string | null = null;
+      let description = line.description?.trim() ?? "";
+      if (line.variantId) {
+        const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId: actor.organizationId } });
+        if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+        variantId = variant.id;
+        description ||= variant.nameKa;
+      }
+      if (!description) throw new BusinessError("ხაზს დასახელება სჭირდება", "validation");
+      lines.push({ variantId, description, quantity, unitPrice, discountAmount: discount, lineTotal: roundMoney(quantity.mul(unitPrice).minus(discount)) });
+    }
+    const priced = await priceInvoice(tx, actor.organizationId, { customerId: customer.id, currency: invoice.currency, buyerAddress: null, lines });
+    await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id } });
+    const updated = await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        customerId: customer.id,
+        subtotal: priced.subtotal.toFixed(2),
+        taxTotal: priced.tax.toFixed(2),
+        total: priced.total.toFixed(2),
+        dueOn: input.dueOn?.trim() ? parseDate(input.dueOn.trim()) : null,
+        lines: {
+          create: lines.map((line, index) => ({
+            variantId: line.variantId,
+            description: line.description,
+            quantity: line.quantity.toFixed(3),
+            unitPrice: line.unitPrice.toFixed(4),
+            discountAmount: line.discountAmount.toFixed(2),
+            lineTotal: line.lineTotal.toFixed(2),
+            sort: index,
+          })),
+        },
       },
-    },
+    });
+    await audit(tx, actor, "invoice.update", "invoice", invoice.id, undefined, { lines: lines.length, total: priced.total.toFixed(2) });
+    return updated;
+  });
+}
+
+export async function postDraftInvoice(actor: Actor, invoiceId: string) {
+  requirePermission(actor, "finance.write");
+  return withTx(async (tx) => {
+    const invoice = await loadDraft(tx, actor.organizationId, invoiceId);
+    if (invoice.lines.length === 0) throw new BusinessError("ინვოისს ერთი ხაზი მაინც სჭირდება", "validation");
+    const lines = invoice.lines.map((line) => ({
+      description: line.description,
+      quantity: D(line.quantity),
+      unitPrice: D(line.unitPrice),
+      discountAmount: D(line.discountAmount),
+      lineTotal: D(line.lineTotal),
+    }));
+    const lineSum = lines.reduce((sum, line) => sum.plus(line.lineTotal), D("0"));
+    const adjustment = roundMoney(D(invoice.subtotal).minus(lineSum));
+    const priced = await priceInvoice(tx, actor.organizationId, {
+      customerId: invoice.customerId,
+      currency: invoice.currency,
+      buyerAddress: null,
+      adjustment,
+      lines,
+    });
+    const blocker = requisitesReady(priced.organization);
+    if (blocker) throw new BusinessError(blocker, "invalid_state");
+    const number = await nextNumber(tx, actor.organizationId, "invoice", "INV");
+    const issued = parseDate(priced.issuedOn);
+    const posted = await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        number,
+        status: "posted",
+        subtotal: priced.subtotal.toFixed(2),
+        taxTotal: priced.tax.toFixed(2),
+        total: priced.total.toFixed(2),
+        issuedOn: issued,
+        dueOn: invoice.dueOn && invoice.dueOn >= issued ? invoice.dueOn : issued,
+        snapshot: priced.snapshot,
+        draftReason: null,
+      },
+    });
+    await audit(tx, actor, "invoice.post", "invoice", invoice.id, undefined, { number, total: priced.total.toFixed(2) });
+    return posted;
   });
 }
 

@@ -41,7 +41,7 @@ export function orderStatusLabel(status: string): string {
   return labels[status] ?? status;
 }
 
-export type DocKind = "purchase" | "quote" | "invoice" | "order" | "receipt";
+export type DocKind = "purchase" | "quote" | "invoice" | "order" | "receipt" | "rental" | "asset";
 
 const DOC_STATUS: Record<DocKind, Record<string, { label: string; tone: BadgeTone }>> = {
   purchase: {
@@ -76,6 +76,22 @@ const DOC_STATUS: Record<DocKind, Record<string, { label: string; tone: BadgeTon
   },
   receipt: {
     posted: { label: "გატარებული", tone: "success" },
+  },
+  rental: {
+    draft: { label: "დრაფტი", tone: "light" },
+    confirmed: { label: "დადასტურებული", tone: "primary" },
+    out: { label: "გატანილი", tone: "warning" },
+    partially_returned: { label: "ნაწილობრივ დაბრუნებული", tone: "warning" },
+    returned: { label: "დაბრუნებული", tone: "success" },
+    cancelled: { label: "გაუქმებული", tone: "error" },
+  },
+  asset: {
+    available: { label: "თავისუფალი", tone: "success" },
+    reserved: { label: "დაჯავშნილი", tone: "primary" },
+    on_rent: { label: "გაქირავებული", tone: "warning" },
+    quarantine: { label: "კარანტინში", tone: "error" },
+    damaged: { label: "დაზიანებული", tone: "error" },
+    lost: { label: "დაკარგული", tone: "error" },
   },
 };
 
