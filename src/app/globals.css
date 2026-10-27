@@ -1901,3 +1901,34 @@ button.cal-chip:hover { filter: brightness(0.97); }
 @media (max-width: 799px) {
   .docv-scroll { max-height: none; }
 }
+.report-nav { padding-bottom: 2px; }
+.report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.report-grid > * { min-width: 0; }
+.report-bars { display: grid; gap: 12px; padding: 16px 18px 18px; }
+.report-bars h2 { font-size: 16px; font-weight: 600; color: var(--color-foreground); }
+.report-bars ul { list-style: none; display: grid; gap: 12px; margin: 0; padding: 0; }
+.report-bars li { display: grid; gap: 6px; }
+.report-bar-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.report-bar-head span { color: var(--color-muted-foreground); min-width: 0; overflow-wrap: anywhere; }
+.report-bar-head strong { color: var(--color-foreground); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report-bar-track { height: 8px; border-radius: 999px; background: var(--color-muted); overflow: hidden; }
+.report-bar-track > div { height: 100%; border-radius: 999px; background: var(--color-primary); }
+.report-bars small { font-size: 12px; color: var(--color-muted-foreground); }
+.report-bars-more { font-size: 12px; }
+.report-hub { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.report-hub a { display: grid; gap: 6px; padding: 18px; text-decoration: none; color: inherit; transition: border-color .15s; }
+.report-hub a:hover { border-color: var(--color-primary); }
+.report-hub strong { font-size: 16px; font-weight: 600; color: var(--color-foreground); }
+.report-hub span { font-size: 13px; color: var(--color-muted-foreground); }
+.report-note { font-size: 13px; color: var(--color-muted-foreground); padding: 14px 18px; }
+@media (max-width: 1023px) {
+  .report-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.report-hub-title { font-size: 18px; font-weight: 600; color: var(--color-foreground); margin-top: 8px; }
+@media (max-width: 799px) {
+  .report-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -4px; padding-inline: 4px; }
+  .report-nav a { flex: 0 0 auto; }
+  .report-filters label { min-width: 0; flex: 1 1 calc(50% - 4px); }
+  .report-filters label:has(input[type="date"]) { flex-basis: calc(50% - 4px); }
+  .report-filters button, .report-filters .button { flex: 1 1 100%; }
+}

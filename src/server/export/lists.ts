@@ -6,6 +6,8 @@ import { customerFilterOptions, customerListFilters, customerListWhere, type Cus
 import { listBalances } from "@/server/features/inventory/stock-service";
 import { listMovements, type MovementFilters } from "@/server/features/inventory/movement-journal";
 import { opsDashboard } from "@/server/features/reports/ops-reports";
+import { excursionReport, type ExcursionReportFilters } from "@/server/features/reports/excursion-report";
+import type { Bucket } from "@/server/features/reports/report-kit";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
@@ -512,6 +514,98 @@ export async function movementsWorkbook(actor: Actor, filters: MovementFilters):
   ], [filters.from, filters.to].filter(Boolean).join(" — ") || undefined);
 }
 
+function bucketSheet(name: string, header: string, rows: Bucket[], showMoney: boolean, quantityHeader = "ბავშვი"): SheetSpec {
+  return {
+    name,
+    columns: [
+      { header, kind: "text", width: 30 },
+      { header: "ჯავშანი", kind: "int", total: true },
+      { header: quantityHeader, kind: "int", total: true },
+      ...(showMoney ? [{ header: "შემოსავალი", kind: "money" as const, total: true }] : []),
+    ],
+    rows: rows.map((row) => [row.label, row.count, row.quantity.toNumber(), ...(showMoney ? [excelNumber(row.amount, 2)] : [])]),
+  };
+}
+
+export async function excursionReportWorkbook(actor: Actor, filters: ExcursionReportFilters): Promise<ExportFile> {
+  const data = await excursionReport(actor, filters);
+  const { totals } = data;
+  return file(
+    "ექსკურსიების რეპორტი",
+    "excursion-report",
+    [
+      {
+        name: "ჯამი",
+        columns: [
+          { header: "მაჩვენებელი", kind: "text", width: 26 },
+          { header: "მნიშვნელობა", kind: "text", width: 18 },
+        ],
+        rows: [
+          ["პერიოდი", `${data.period.from} — ${data.period.to}`],
+          ["ჯავშანი", String(totals.bookings)],
+          ["დასრულებული", String(totals.completed)],
+          ["გაუქმებული", String(totals.cancelled)],
+          ["დაგეგმილი ბავშვი", String(totals.planned)],
+          ["მოვიდა", String(totals.attended)],
+          ["ანგარიშსაწერი", String(totals.billable)],
+          ["დასწრება", totals.attendanceRate == null ? "—" : `${totals.attendanceRate}%`],
+          ["ფოტო ნებადართულია", String(totals.photoAllowed)],
+          ...(data.showMoney ? [["შემოსავალი", totals.revenue?.toFixed(2) ?? "0.00"], ["საშუალო ბავშვზე", totals.perChild?.toFixed(2) ?? "—"]] : []),
+        ],
+      },
+      {
+        name: "ჯავშნები",
+        columns: [
+          { header: "ნომერი", kind: "text", width: 14 },
+          { header: "დაწყება", kind: "text", width: 18 },
+          { header: "კლიენტი", kind: "text", width: 28 },
+          { header: "ტიპი", kind: "text", width: 14 },
+          { header: "პროგრამა", kind: "text", width: 22 },
+          { header: "შენიშვნა", kind: "text", width: 28, wrap: true },
+          { header: "სივრცე", kind: "text", width: 16 },
+          { header: "გიდი", kind: "text", width: 22 },
+          { header: "სტატუსი", kind: "text", width: 16 },
+          { header: PHOTO_ALLOWED_FIELD, kind: "text", width: 12 },
+          { header: "დაგეგმილი", kind: "int", total: true },
+          { header: "მოვიდა", kind: "int", total: true },
+          { header: "ანგარიშსაწერი", kind: "int", total: true },
+          ...(data.showMoney ? [{ header: "შემოსავალი", kind: "money" as const, total: true }] : []),
+        ],
+        rows: data.rows.map((row) => [
+          row.number,
+          when(row.startsAt),
+          row.customer,
+          row.segment,
+          row.program,
+          row.note,
+          row.resource,
+          row.guides.join(", "),
+          row.statusLabel,
+          photoAllowedLabel(row.photoAllowed),
+          row.planned,
+          row.attended,
+          row.billable,
+          ...(data.showMoney ? [row.revenue ? excelNumber(row.revenue, 2) : null] : []),
+        ]),
+      },
+      bucketSheet("თვეები", "თვე", data.breakdowns.months, data.showMoney),
+      bucketSheet("სკოლები", "კლიენტი", data.breakdowns.customers, data.showMoney),
+      bucketSheet("პროგრამები", "პროგრამა", data.breakdowns.programs, data.showMoney),
+      bucketSheet("გიდები", "გიდი", data.breakdowns.guides, data.showMoney),
+    ],
+    "ბავშვი: დასრულებულზე მოსული, დანარჩენზე დაგეგმილი. გაუქმებული არ ითვლება.",
+  );
+}
+
+function params<T extends string>(url: URL, keys: readonly T[]): Partial<Record<T, string>> {
+  const out: Partial<Record<T, string>> = {};
+  for (const key of keys) {
+    const value = url.searchParams.get(key);
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
 function movementFilters(url: URL): MovementFilters {
   return {
     from: url.searchParams.get("from") ?? undefined,
@@ -525,6 +619,8 @@ function movementFilters(url: URL): MovementFilters {
 
 const BUILDERS = {
   movements: (actor: Actor, url: URL) => movementsWorkbook(actor, movementFilters(url)),
+  "excursion-report": (actor: Actor, url: URL) =>
+    excursionReportWorkbook(actor, params(url, ["from", "to", "customerId", "programId", "guideId", "status", "photo"] as const)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
