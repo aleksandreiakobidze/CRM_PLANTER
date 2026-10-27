@@ -1932,3 +1932,10 @@ button.cal-chip:hover { filter: brightness(0.97); }
   .report-filters label:has(input[type="date"]) { flex-basis: calc(50% - 4px); }
   .report-filters button, .report-filters .button { flex: 1 1 100%; }
 }
+.report-funnel { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 0 18px 18px; }
+.report-funnel > div { display: grid; gap: 6px; }
+.report-funnel span, .report-funnel small { font-size: 12px; color: var(--color-muted-foreground); }
+.report-funnel strong { font-size: 22px; font-weight: 600; color: var(--color-foreground); font-variant-numeric: tabular-nums; }
+@media (max-width: 799px) {
+  .report-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

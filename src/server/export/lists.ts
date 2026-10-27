@@ -7,6 +7,7 @@ import { listBalances } from "@/server/features/inventory/stock-service";
 import { listMovements, type MovementFilters } from "@/server/features/inventory/movement-journal";
 import { opsDashboard } from "@/server/features/reports/ops-reports";
 import { excursionReport, type ExcursionReportFilters } from "@/server/features/reports/excursion-report";
+import { crmReport, type CrmReportFilters } from "@/server/features/reports/crm-report";
 import type { Bucket } from "@/server/features/reports/report-kit";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
@@ -597,6 +598,83 @@ export async function excursionReportWorkbook(actor: Actor, filters: ExcursionRe
   );
 }
 
+function countSheet(name: string, header: string, rows: Bucket[]): SheetSpec {
+  return {
+    name,
+    columns: [
+      { header, kind: "text", width: 30 },
+      { header: "რაოდენობა", kind: "int", total: true },
+    ],
+    rows: rows.map((row) => [row.label, row.count]),
+  };
+}
+
+export async function crmReportWorkbook(actor: Actor, filters: CrmReportFilters): Promise<ExportFile> {
+  const data = await crmReport(actor, filters);
+  const { totals } = data;
+  return file("CRM რეპორტი", "crm-report", [
+    {
+      name: "ჯამი",
+      columns: [
+        { header: "მაჩვენებელი", kind: "text", width: 28 },
+        { header: "მნიშვნელობა", kind: "text", width: 18 },
+      ],
+      rows: [
+        ["პერიოდი", `${data.period.from} — ${data.period.to}`],
+        ["კლიენტი", String(totals.customers)],
+        ["მომხმარებელი", String(totals.active)],
+        ["ახალი პერიოდში", String(totals.newCustomers)],
+        ["ვადაგასული კონტაქტი", String(totals.overdueContacts)],
+        ["შეთავაზება", String(totals.quotes)],
+        ["უარყოფილი შეთავაზება", String(totals.declined)],
+        ["დავალება შეიქმნა", String(totals.tasksCreated)],
+        ["დავალება შესრულდა", String(totals.tasksDone)],
+        ["ღია დავალება", String(totals.tasksOpen)],
+        ["ვადაგასული დავალება", String(totals.tasksOverdue)],
+      ],
+    },
+    {
+      name: "ძაბრი",
+      columns: [
+        { header: "ეტაპი", kind: "text", width: 20 },
+        { header: "შეთავაზება", kind: "int" },
+        { header: "%", kind: "text" },
+        ...(data.showMoney ? [{ header: "თანხა", kind: "money" as const }] : []),
+      ],
+      rows: data.funnel.map((row) => [row.label, row.count, row.rate == null ? "—" : `${row.rate}%`, ...(data.showMoney ? [row.value ? excelNumber(row.value, 2) : null] : [])]),
+    },
+    {
+      name: "გუნდი",
+      columns: [
+        { header: "თანამშრომელი", kind: "text", width: 24 },
+        { header: "შექმნა", kind: "int", total: true },
+        { header: "მიეწერა", kind: "int", total: true },
+        { header: "შეასრულა", kind: "int", total: true },
+        { header: "ღია", kind: "int", total: true },
+        { header: "ვადაგასული", kind: "int", total: true },
+      ],
+      rows: data.team.map((row) => [row.name, row.created, row.assigned, row.done, row.open, row.overdue]),
+    },
+    countSheet("სტატუსი", "სტატუსი", data.breakdowns.status),
+    countSheet("ზონა", "ზონა", data.breakdowns.zones),
+    countSheet("ტიპი", "ტიპი", data.breakdowns.types),
+    countSheet("პრიორიტეტი", "პრიორიტეტი", data.breakdowns.priority),
+    countSheet("პასუხისმგებელი", "პასუხისმგებელი", data.breakdowns.owners),
+    {
+      name: "ვადაგასული",
+      columns: [
+        { header: "კლიენტი", kind: "text", width: 30 },
+        { header: "სტატუსი", kind: "text", width: 22 },
+        { header: "პასუხისმგებელი", kind: "text", width: 20 },
+        { header: "ტელეფონი", kind: "phone", width: 16 },
+        { header: "შემდეგი კონტაქტი", kind: "date" },
+        { header: "დაგვიანება (დღე)", kind: "int" },
+      ],
+      rows: data.overdue.map((row) => [row.name, row.status, row.owner, row.phone, excelDate(row.nextContactOn), row.days]),
+    },
+  ]);
+}
+
 function params<T extends string>(url: URL, keys: readonly T[]): Partial<Record<T, string>> {
   const out: Partial<Record<T, string>> = {};
   for (const key of keys) {
@@ -621,6 +699,7 @@ const BUILDERS = {
   movements: (actor: Actor, url: URL) => movementsWorkbook(actor, movementFilters(url)),
   "excursion-report": (actor: Actor, url: URL) =>
     excursionReportWorkbook(actor, params(url, ["from", "to", "customerId", "programId", "guideId", "status", "photo"] as const)),
+  "crm-report": (actor: Actor, url: URL) => crmReportWorkbook(actor, params(url, ["from", "to", "ownerId", "segment"] as const)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
