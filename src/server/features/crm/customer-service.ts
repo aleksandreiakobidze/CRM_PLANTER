@@ -8,6 +8,7 @@ import { parseDateOnly, tbilisiDateString } from "@/server/time";
 import { prepareTaskFiles, readTaskBytes, removeTaskFiles, writeTaskFiles } from "@/server/features/crm/task-files";
 import { ensurePlaceTerms } from "@/server/features/crm/place-terms";
 import { queueTaskAssignmentMail, queueTaskCalendarSync } from "@/server/features/integrations/calendar-sync";
+import { notifyOthers } from "@/server/features/notifications/notification-service";
 import { withTx } from "@/server/tx";
 
 const STATUSES = new Set(["fresh", "to_contact", "quote_sent", "customer", "declined"]);
@@ -344,6 +345,7 @@ export async function createTask(
         },
       });
       await audit(tx, actor, "task.create", "task", task.id, undefined, { title, assigneeIds });
+      await notifyOthers(tx, actor, { kind: "task", entityId: task.id, title, href: `/work/${task.id}` });
       return task;
     });
     await queueTaskCalendarSync(actor.organizationId, task.id, "upsert");

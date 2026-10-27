@@ -137,6 +137,9 @@ export function Moon(props: IconProps) {
 export function PartyPopper(props: IconProps) {
   return glyph(props, "M5.8 11.3 2 22l10.7-3.8M4 3h.01M22 8h.01M15 2h.01M22 20h.01M22 2l-2.24.75a2.9 8.7 0 0 0-1.01 8.7L11 13.5");
 }
+export function Bell(props: IconProps) {
+  return glyph(props, "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0");
+}
 export function MessageCircle(props: IconProps) {
   return glyph(props, "M7.9 20A9 9 0 1 0 4 16.1L2 22z");
 }

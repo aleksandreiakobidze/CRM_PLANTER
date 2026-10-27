@@ -89,6 +89,7 @@ model Organization {
   internalShipments  InternalShipment[]
   chatThreads        ChatThread[]
   userIntegrations   UserIntegration[]
+  notifications      Notification[]
 
   @@map("organizations")
 }
@@ -117,6 +118,7 @@ model User {
   chatMessages    ChatMessage[]     @relation("ChatAuthor")
   integrations    UserIntegration[]
   calendarLinks   CalendarSyncLink[]
+  notifications   Notification[]
 
   @@map("users")
 }
@@ -1809,4 +1811,22 @@ model CalendarSyncLink {
 
   @@unique([taskId, userId])
   @@map("calendar_sync_links")
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  userId         String    @map("user_id")
+  kind           String
+  entityId       String    @map("entity_id")
+  title          String
+  href           String
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }

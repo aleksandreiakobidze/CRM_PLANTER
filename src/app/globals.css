@@ -1271,7 +1271,8 @@ button.cal-chip:hover { filter: brightness(0.97); }
 
 .messenger-dock { position: relative; }
 .messenger-toggle { position: relative; }
-.messenger-badge {
+.messenger-badge,
+.notice-badge {
   position: absolute;
   top: -5px;
   right: -5px;
@@ -1287,6 +1288,54 @@ button.cal-chip:hover { filter: brightness(0.97); }
   place-items: center;
   line-height: 1;
 }
+.notice-dock { position: relative; }
+.notice-toggle { position: relative; }
+.notice-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(480px, calc(100vh - 96px));
+  overflow: auto;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  align-content: start;
+}
+.notice-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  background: var(--color-card);
+}
+.notice-panel header button { min-height: 36px; padding: 6px 10px; font-size: 13px; }
+.notice-panel .muted { margin: 0; padding: 14px; }
+.notice-panel ul { list-style: none; margin: 0; padding: 6px; display: grid; gap: 4px; }
+.notice-panel li button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  background: transparent;
+  color: var(--color-foreground);
+  border: 0;
+  border-radius: 10px;
+  min-height: 44px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+}
+.notice-panel li button small { color: var(--color-muted-foreground); font-size: 11px; }
+.notice-panel li button span { font-size: 14px; }
+.notice-panel li button.is-unread { background: var(--brand-soft); }
+.notice-panel li button:hover { background: var(--color-muted); }
 .messenger-panel,
 .messenger-page {
   display: grid;
@@ -1468,4 +1517,16 @@ button.cal-chip:hover { filter: brightness(0.97); }
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
   .messenger-compose input { font-size: 16px; }
+  .notice-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    max-height: min(70dvh, 520px);
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    z-index: 45;
+  }
 }

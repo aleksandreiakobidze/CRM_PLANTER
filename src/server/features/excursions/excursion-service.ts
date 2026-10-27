@@ -7,6 +7,7 @@ import { changeBalance, consumeReservation, releaseReservation } from "@/server/
 import { D, Decimal, roundMoney } from "@/server/money";
 import { nextNumber } from "@/server/numbers";
 import { BUSINESS_TIME_ZONE, withinWindow, zonedDateTime } from "@/server/time";
+import { notifyOthers } from "@/server/features/notifications/notification-service";
 import { withTx } from "@/server/tx";
 import { formatInTimeZone } from "date-fns-tz";
 
@@ -62,7 +63,7 @@ async function bookExcursionTx(tx: Tx, actor: Actor, input: Parameters<typeof bo
     if (clash) throw new BusinessError("თანამშრომელი ამ დროს უკვე დაკავებულია", "staff_overlap");
   }
   const number = await nextNumber(tx, actor.organizationId, "excursion", "EX");
-  return tx.excursionBooking.create({
+  const booking = await tx.excursionBooking.create({
     data: {
       organizationId: actor.organizationId,
       number,
@@ -91,6 +92,14 @@ async function bookExcursionTx(tx: Tx, actor: Actor, input: Parameters<typeof bo
       },
     },
   });
+  const customer = await tx.customer.findFirst({ where: { id: booking.customerId }, select: { name: true } });
+  await notifyOthers(tx, actor, {
+    kind: "excursion",
+    entityId: booking.id,
+    title: customer ? `${booking.number} \u00b7 ${customer.name}` : booking.number,
+    href: `/excursions/${booking.id}`,
+  });
+  return booking;
 }
 
 export async function completeExcursion(actor: Actor, bookingId: string, attendedChildren: number) {

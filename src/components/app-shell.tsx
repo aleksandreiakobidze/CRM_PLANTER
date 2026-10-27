@@ -32,6 +32,7 @@ import {
 } from "@/components/icons";
 import { logoutAction } from "@/server/actions/auth-actions";
 import { MessengerDock } from "@/components/messenger";
+import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { CHAT_COPY } from "@/server/features/chat/chat-copy";
 
@@ -235,6 +236,7 @@ export function AppShell({ children, allowedHrefs }: { children: React.ReactNode
             <button type="submit">ძებნა</button>
           </form>
           <div className="topbar-tools">
+            <NotificationBell />
             <MessengerDock />
             <ThemeToggle />
           </div>
