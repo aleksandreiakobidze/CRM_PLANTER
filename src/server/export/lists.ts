@@ -11,6 +11,7 @@ import { crmReport, type CrmReportFilters } from "@/server/features/reports/crm-
 import type { Bucket } from "@/server/features/reports/report-kit";
 import { salesReport, type SalesReportFilters } from "@/server/features/reports/sales-report";
 import { rentalReport, type RentalReportFilters } from "@/server/features/reports/rental-report";
+import { purchaseReport, type PurchaseReportFilters } from "@/server/features/reports/purchase-report";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
@@ -819,6 +820,73 @@ export async function rentalReportWorkbook(actor: Actor, filters: RentalReportFi
   ]);
 }
 
+export async function purchaseReportWorkbook(actor: Actor, filters: PurchaseReportFilters): Promise<ExportFile> {
+  const data = await purchaseReport(actor, filters);
+  const money = data.showMoney;
+  return file("შესყიდვების რეპორტი", "purchase-report", [
+    {
+      name: "შეკვეთები",
+      columns: [
+        { header: "ნომერი", kind: "text", width: 16 },
+        { header: "თარიღი", kind: "text", width: 18 },
+        { header: "მოსალოდნელი", kind: "date" },
+        { header: "მიმწოდებელი", kind: "text", width: 26 },
+        { header: "სტატუსი", kind: "text", width: 20 },
+        { header: "ხაზი", kind: "int" },
+        { header: "შეკვეთილი რაოდ.", kind: "qty", total: true },
+        { header: "მიღებული რაოდ.", kind: "qty", total: true },
+        ...(money
+          ? [
+              { header: "შეკვეთილი", kind: "money" as const, total: true },
+              { header: "მიღებული", kind: "money" as const, total: true },
+              { header: "დარჩენილი", kind: "money" as const, total: true },
+              { header: "დამატებითი ხარჯი", kind: "money" as const, total: true },
+            ]
+          : []),
+      ],
+      rows: data.rows.map((row) => [
+        row.number,
+        when(row.createdAt),
+        excelDate(row.expectedOn),
+        row.supplier,
+        row.statusLabel,
+        row.lines,
+        excelNumber(row.quantity, 3),
+        excelNumber(row.receivedQty, 3),
+        ...(money ? [excelNumber(row.ordered, 2), excelNumber(row.received, 2), excelNumber(row.outstanding, 2), excelNumber(row.landed, 2)] : []),
+      ]),
+    },
+    {
+      name: "მისაღები",
+      columns: [
+        { header: "შეკვეთა", kind: "text", width: 16 },
+        { header: "მიმწოდებელი", kind: "text", width: 26 },
+        { header: "შიდა კოდი", kind: "text", width: 14 },
+        { header: "აითემი", kind: "text", width: 28 },
+        { header: "მოსალოდნელი", kind: "date" },
+        { header: "შეკვეთილი", kind: "qty" },
+        { header: "მიღებული", kind: "qty" },
+        { header: "დარჩა", kind: "qty", total: true },
+        ...(money ? [{ header: "ღირებულება", kind: "money" as const, total: true }] : []),
+      ],
+      rows: data.outstandingLines.map((row) => [
+        row.number,
+        row.supplier,
+        row.code,
+        row.name,
+        excelDate(row.expectedOn),
+        excelNumber(row.quantity, 3),
+        excelNumber(row.receivedQty, 3),
+        excelNumber(row.open, 3),
+        ...(money ? [excelNumber(row.value, 2)] : []),
+      ]),
+    },
+    amountSheet("მიმწოდებლები", "მიმწოდებელი", data.breakdowns.suppliers, money, true),
+    amountSheet("პროდუქტები", "პროდუქტი", data.breakdowns.products, money, true),
+    amountSheet("თვეები", "თვე", data.breakdowns.months, money, true),
+  ]);
+}
+
 function params<T extends string>(url: URL, keys: readonly T[]): Partial<Record<T, string>> {
   const out: Partial<Record<T, string>> = {};
   for (const key of keys) {
@@ -846,6 +914,7 @@ const BUILDERS = {
   "crm-report": (actor: Actor, url: URL) => crmReportWorkbook(actor, params(url, ["from", "to", "ownerId", "segment"] as const)),
   "sales-report": (actor: Actor, url: URL) => salesReportWorkbook(actor, params(url, ["from", "to", "customerId", "ownerId", "source"] as const)),
   "rental-report": (actor: Actor, url: URL) => rentalReportWorkbook(actor, params(url, ["from", "to", "customerId", "status"] as const)),
+  "purchase-report": (actor: Actor, url: URL) => purchaseReportWorkbook(actor, params(url, ["from", "to", "supplierId", "status", "variantId"] as const)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
