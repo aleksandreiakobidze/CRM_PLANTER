@@ -1939,3 +1939,6 @@ button.cal-chip:hover { filter: brightness(0.97); }
 @media (max-width: 799px) {
   .report-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.report-inline-bar { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.report-inline-bar .report-bar-track { flex: 1; }
+.report-inline-bar span { font-size: 12px; color: var(--color-muted-foreground); font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
