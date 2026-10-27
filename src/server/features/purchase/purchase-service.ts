@@ -95,6 +95,57 @@ export async function createPurchaseOrder(
   }
 }
 
+export async function updatePurchaseOrder(
+  actor: Actor,
+  purchaseOrderId: string,
+  input: {
+    supplierId: string;
+    expectedOn?: string;
+    notes?: string;
+    lines: { variantId: string; quantity: string; unitPrice: string }[];
+  },
+) {
+  requirePermission(actor, "purchase.write");
+  if (input.lines.length === 0) throw new BusinessError("შესყიდვას სჭირდება ერთი ხაზი მაინც", "validation");
+  return withTx(async (tx) => {
+    const order = await loadOrder(tx, actor.organizationId, purchaseOrderId);
+    if (order.status !== "draft") throw new BusinessError("რედაქტირება მხოლოდ დრაფტზეა", "invalid_state");
+    const supplier = await tx.supplier.findFirst({ where: { id: input.supplierId, organizationId: actor.organizationId } });
+    if (!supplier) throw new BusinessError("მიმწოდებელი ვერ მოიძებნა", "not_found");
+    const lines = await Promise.all(
+      input.lines.map(async (line, index) => {
+        const variant = await tx.productVariant.findFirst({ where: { id: line.variantId, organizationId: actor.organizationId } });
+        if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+        const quantity = D(line.quantity);
+        const unitPrice = D(line.unitPrice);
+        if (quantity.lte(0) || unitPrice.lt(0)) throw new BusinessError("რაოდენობა და ფასი არასწორია", "validation");
+        return {
+          variantId: variant.id,
+          description: variant.nameKa,
+          quantity: quantity.toFixed(3),
+          unitPrice: unitPrice.toFixed(4),
+          lineTotal: lineAmount(quantity, unitPrice).toFixed(2),
+          sort: index,
+        };
+      }),
+    );
+    await tx.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: order.id } });
+    const updated = await tx.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        supplierId: supplier.id,
+        currency: supplier.currency,
+        expectedOn: input.expectedOn ? parseDateOnly(input.expectedOn) : null,
+        notes: input.notes?.trim() || null,
+        lines: { create: lines },
+      },
+      include: { lines: true },
+    });
+    await audit(tx, actor, "purchase.update", "purchase_order", order.id);
+    return updated;
+  });
+}
+
 export async function submitPurchaseOrder(actor: Actor, purchaseOrderId: string) {
   requirePermission(actor, "purchase.write");
   return withTx(async (tx) => {
@@ -115,6 +166,8 @@ export async function receivePurchase(
   },
 ) {
   requirePermission(actor, "purchase.write");
+  const requestedLines = input.lines.filter((line) => line.quantity.trim() && !D(line.quantity.trim()).isZero());
+  if (requestedLines.length === 0) throw new BusinessError("მიუთითეთ მისაღები რაოდენობა", "validation");
   try {
     return await withTx(async (tx) => {
       const existing = await tx.goodsReceipt.findUnique({ where: { postingKey: input.postingKey } });
@@ -140,7 +193,7 @@ export async function receivePurchase(
           receivedOn: parseDateOnly(input.receivedOn ?? tbilisiDateString()),
         },
       });
-      for (const requested of input.lines) {
+      for (const requested of requestedLines) {
         const line = order.lines.find((item) => item.id === requested.purchaseLineId);
         if (!line) throw new BusinessError("შესყიდვის ხაზი ვერ მოიძებნა", "not_found");
         const quantity = D(requested.quantity);

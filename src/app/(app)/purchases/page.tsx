@@ -1,17 +1,13 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { BoundForm } from "@/components/bound-form";
+import { docDate, docMoney } from "@/components/doc-view";
 import { RecordList } from "@/components/record-list";
+import { Badge } from "@/components/ui/badge";
 import { createSupplierAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
+import { docStatus } from "@/server/labels";
 import { D } from "@/server/money";
-
-const STATUS: Record<string, string> = {
-  draft: "დრაფტი",
-  ordered: "გაგზავნილი",
-  partial: "ნაწილობრივ მიღებული",
-  received: "მიღებული",
-};
 
 export default async function PurchasesPage() {
   const actor = await getActor();
@@ -47,18 +43,27 @@ export default async function PurchasesPage() {
         columns={[
           { key: "number", header: "ნომერი" },
           { key: "supplier", header: "მიმწოდებელი" },
+          { key: "date", header: "თარიღი" },
+          { key: "expected", header: "მოსალოდნელი" },
+          { key: "lines", header: "ხაზი" },
           { key: "status", header: "სტატუსი" },
           { key: "total", header: "ჯამი" },
         ]}
-        rows={orders.map((order) => ({
-          id: order.id,
-          cells: {
-            number: <Link href={`/purchases/${order.id}`}>{order.number}</Link>,
-            supplier: order.supplier.name,
-            status: STATUS[order.status] ?? order.status,
-            total: order.lines.reduce((sum, line) => sum.plus(D(line.lineTotal)), D("0")).toFixed(2),
-          },
-        }))}
+        rows={orders.map((order) => {
+          const status = docStatus("purchase", order.status);
+          return {
+            id: order.id,
+            cells: {
+              number: <Link href={`/purchases/${order.id}`}>{order.number}</Link>,
+              supplier: order.supplier.name,
+              date: docDate(order.createdAt, true),
+              expected: docDate(order.expectedOn),
+              lines: order.lines.length,
+              status: <Badge variant={status.tone}>{status.label}</Badge>,
+              total: docMoney(order.lines.reduce((sum, line) => sum.plus(D(line.lineTotal)), D("0")), order.currency),
+            },
+          };
+        })}
       />
     </section>
   );

@@ -36,8 +36,9 @@ import {
   createSupplier,
   receivePurchase,
   submitPurchaseOrder,
+  updatePurchaseOrder,
 } from "@/server/features/purchase/purchase-service";
-import { returnSoldGoods } from "@/server/features/sales/order-service";
+import { parseDocumentLines, returnSoldGoods } from "@/server/features/sales/order-service";
 import { zonedDateTime } from "@/server/time";
 
 function done(message: string, id?: string): ActionState {
@@ -61,6 +62,14 @@ export async function createSupplierAction(_prev: ActionState, formData: FormDat
   }
 }
 
+function purchaseLines(formData: FormData) {
+  return parseDocumentLines(String(formData.get("lines") ?? "")).map((line) => ({
+    variantId: line.variantId ?? "",
+    quantity: line.quantity,
+    unitPrice: line.unitPrice ?? "0",
+  }));
+}
+
 export async function createPurchaseOrderAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   try {
     const actor = await getActor();
@@ -69,16 +78,28 @@ export async function createPurchaseOrderAction(_prev: ActionState, formData: Fo
       expectedOn: String(formData.get("expectedOn") ?? "") || undefined,
       notes: String(formData.get("notes") ?? ""),
       postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
-      lines: [
-        {
-          variantId: String(formData.get("variantId") ?? ""),
-          quantity: String(formData.get("quantity") ?? ""),
-          unitPrice: String(formData.get("unitPrice") ?? ""),
-        },
-      ],
+      lines: purchaseLines(formData),
     });
     revalidatePath("/purchases");
     redirect(`/purchases/${order.id}`);
+  } catch (error) {
+    rethrowRedirect(error);
+    return { ok: false, message: publicMessage(error) };
+  }
+}
+
+export async function updatePurchaseOrderAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    const actor = await getActor();
+    const orderId = String(formData.get("purchaseOrderId") ?? "");
+    await updatePurchaseOrder(actor, orderId, {
+      supplierId: String(formData.get("supplierId") ?? ""),
+      expectedOn: String(formData.get("expectedOn") ?? "") || undefined,
+      notes: String(formData.get("notes") ?? ""),
+      lines: purchaseLines(formData),
+    });
+    revalidatePath(`/purchases/${orderId}`);
+    redirect(`/purchases/${orderId}`);
   } catch (error) {
     rethrowRedirect(error);
     return { ok: false, message: publicMessage(error) };
@@ -100,7 +121,9 @@ export async function receivePurchaseAction(_prev: ActionState, formData: FormDa
       locationId: String(formData.get("locationId") ?? ""),
       receivedOn: String(formData.get("receivedOn") ?? "") || undefined,
       postingKey: String(formData.get("postingKey") ?? crypto.randomUUID()),
-      lines: [{ purchaseLineId: String(formData.get("purchaseLineId") ?? ""), quantity: String(formData.get("quantity") ?? "") }],
+      lines: formData
+        .getAll("purchaseLineId")
+        .map((lineId, index) => ({ purchaseLineId: String(lineId), quantity: String(formData.getAll("quantity")[index] ?? "") })),
     });
     revalidatePath(`/purchases/${orderId}`);
     revalidatePath("/inventory");

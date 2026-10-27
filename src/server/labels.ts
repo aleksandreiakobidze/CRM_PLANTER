@@ -41,6 +41,48 @@ export function orderStatusLabel(status: string): string {
   return labels[status] ?? status;
 }
 
+export type DocKind = "purchase" | "quote" | "invoice" | "order" | "receipt";
+
+const DOC_STATUS: Record<DocKind, Record<string, { label: string; tone: BadgeTone }>> = {
+  purchase: {
+    draft: { label: "დრაფტი", tone: "light" },
+    ordered: { label: "გაგზავნილი", tone: "primary" },
+    partial: { label: "ნაწილობრივ მიღებული", tone: "warning" },
+    received: { label: "მიღებული", tone: "success" },
+    cancelled: { label: "გაუქმებული", tone: "error" },
+  },
+  quote: {
+    draft: { label: "დრაფტი", tone: "light" },
+    sent: { label: "გაგზავნილი", tone: "primary" },
+    accepted: { label: "მიღებული", tone: "success" },
+    declined: { label: "უარყოფილი", tone: "error" },
+    converted: { label: "შეკვეთა გახდა", tone: "success" },
+  },
+  invoice: {
+    draft: { label: "დრაფტი", tone: "light" },
+    posted: { label: "გატარებული", tone: "primary" },
+    paid: { label: "გადახდილი", tone: "success" },
+    cancelled: { label: "გაუქმებული", tone: "error" },
+  },
+  order: {
+    open: { label: "ღია", tone: "light" },
+    draft: { label: "ღია", tone: "light" },
+    authorized: { label: "ავტორიზებული", tone: "primary" },
+    confirmed: { label: "ავტორიზებული", tone: "primary" },
+    completed: { label: "დასრულებული", tone: "success" },
+    fulfilled: { label: "დასრულებული", tone: "success" },
+    rs_error: { label: "RS შეცდომა", tone: "error" },
+    cancelled: { label: "გაუქმებული", tone: "error" },
+  },
+  receipt: {
+    posted: { label: "გატარებული", tone: "success" },
+  },
+};
+
+export function docStatus(kind: DocKind, code: string): { label: string; tone: BadgeTone } {
+  return DOC_STATUS[kind][code] ?? { label: code, tone: "light" };
+}
+
 export function statusBadge(code: string) {
   return RELATIONSHIP[code] ?? { label: code, color: "#667085", tone: "light" as const };
 }

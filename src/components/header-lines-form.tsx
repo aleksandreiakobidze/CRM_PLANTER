@@ -21,7 +21,7 @@ export function HeaderLinesForm({
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   label: string;
-  mode: "sale" | "rental" | "stock";
+  mode: "sale" | "rental" | "stock" | "purchase";
   partyName?: string;
   partyLabel?: string;
   partyDefault?: string;

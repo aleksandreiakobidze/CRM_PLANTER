@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { D } from "@/server/money";
 import { LINE_KIND_LABEL, SERVICE_KINDS, type LineKind } from "@/server/features/sales/line-kinds";
 
-export type DocumentLineMode = "sale" | "rental" | "stock";
+export type DocumentLineMode = "sale" | "rental" | "stock" | "purchase";
 
 export type CatalogItem = {
   value: string;
@@ -79,6 +79,7 @@ export function DocumentLines({
   }, D(0));
   const addLabel = mode === "rental" ? "მცენარის დამატება" : "აითემის დამატება";
   const itemHeader = mode === "rental" ? "მცენარე" : "დასახელება";
+  const priceHeader = mode === "rental" ? "ფასი" : mode === "purchase" ? "ერთეულის ღირებულება" : "ერთეულის ფასი";
   const emptyText = mode === "rental" ? "მცენარე ჯერ არ არის არჩეული." : "ხაზი ჯერ არ არის არჩეული.";
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ka");
@@ -134,7 +135,7 @@ export function DocumentLines({
             <tr>
               <th>{itemHeader}</th>
               {mode === "rental" ? null : <th>რაოდენობა</th>}
-              {mode === "stock" ? null : <th>{mode === "rental" ? "ფასი" : "ერთეულის ფასი"}</th>}
+              {mode === "stock" ? null : <th>{priceHeader}</th>}
               {mode === "sale" ? <th>ფასდაკლება</th> : null}
               <th />
             </tr>
@@ -175,10 +176,10 @@ export function DocumentLines({
                   {mode === "stock" ? null : (
                     <td>
                       <input
-                        aria-label={mode === "rental" ? "ფასი" : "ერთეულის ფასი"}
+                        aria-label={priceHeader}
                         value={row.unitPrice}
                         onChange={(event) => patch(row.key, { unitPrice: event.target.value })}
-                        required={mode === "rental" || service}
+                        required={mode === "rental" || mode === "purchase" || service}
                       />
                     </td>
                   )}
@@ -225,7 +226,7 @@ export function DocumentLines({
         <div className="item-picker">
           <label>
             ძებნა
-            <input aria-label="ძებნა" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="SKU" />
+            <input aria-label="ძებნა" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="შიდა კოდი, SKU ან სახელი" />
           </label>
           <ul>
             {visible.length === 0 ? <li className="combo-empty">ვერ მოიძებნა</li> : visible.map((item) => (
