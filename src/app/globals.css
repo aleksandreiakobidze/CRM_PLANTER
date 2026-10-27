@@ -508,7 +508,7 @@ form.row, .toolbar {
 .customer-page { min-width: 0; }
 .customer-board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
 .customer-board > * { min-width: 0; }
-.customer-list-card { overflow-x: auto; }
+.customer-list-card { position: relative; overflow-x: auto; }
 .customer-board-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .customer-sort-select { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; color: var(--color-muted-foreground); }
 .customer-sort-select select { height: 36px; min-height: 36px; width: auto; padding-top: 0; padding-bottom: 0; font-size: 13px; }
