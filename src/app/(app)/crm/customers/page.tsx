@@ -155,7 +155,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
 
       <CustomerFilters
-        key={JSON.stringify(filters)}
         filters={filters}
         keep={sortParams}
         activeCount={panelCount}

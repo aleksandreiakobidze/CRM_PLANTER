@@ -86,6 +86,7 @@ export function CustomerFilters({
 
   return (
     <form className="customer-filters" role="search" aria-label="კლიენტების ფილტრი" onSubmit={submit}>
+      <div key={JSON.stringify(filters)}>
       <div className="customer-filter-bar">
         <label className="customer-search">
           <Search size={18} aria-hidden />
@@ -140,6 +141,7 @@ export function CustomerFilters({
           <Button type="button" variant="secondary" onClick={clear}>გასუფთავება</Button>
           <Button type="submit">ჩვენება</Button>
         </div>
+      </div>
       </div>
     </form>
   );
