@@ -5,6 +5,7 @@ import { ComboBox } from "@/components/combo-box";
 import { DocTabs } from "@/components/doc-tabs";
 import { HeaderLinesForm } from "@/components/header-lines-form";
 import { customerOption } from "@/lib/customer-option";
+import { variantLabel } from "@/lib/variant-label";
 import { RsFields } from "@/components/rs-fields";
 import { creditNoteAction, returnGoodsAction } from "@/server/actions/ops-actions";
 import { cancelOrderAction, confirmOrderAction, invoiceOrderAction } from "@/server/actions/work-actions";
@@ -99,7 +100,7 @@ export default async function OrderPage({
               partyLabel="კლიენტი"
               partyDefault={order.customerId}
               parties={customers.map(customerOption)}
-              items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
+              items={variants.map((variant) => ({ value: variant.id, label: variantLabel(variant), price: variant.listPrice.toString() }))}
               initialLines={order.lines.map((line) => ({
                 kind: isLineKind(line.kind) ? line.kind : "item",
                 itemId: line.variantId ?? "",

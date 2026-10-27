@@ -2,6 +2,7 @@ import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
+import { nextInternalCode } from "@/server/features/catalog/internal-code";
 import { D } from "@/server/money";
 
 export async function createVariant(
@@ -20,10 +21,15 @@ export async function createVariant(
   },
 ) {
   requirePermission(actor, "catalog.write");
-  if (!input.sku.trim() || !input.variantName.trim()) throw new BusinessError("SKU და სახელი სავალდებულოა", "validation");
+  if (!input.variantName.trim()) throw new BusinessError("სახელი სავალდებულოა", "validation");
   const price = D(input.listPrice);
   if (price.lt(0)) throw new BusinessError("ფასი უარყოფითი ვერ იქნება", "validation");
   return getDb().$transaction(async (tx) => {
+    const internalCode = await nextInternalCode(tx, actor.organizationId, "variant");
+    const sku = input.sku.trim() || internalCode;
+    if (await tx.productVariant.findFirst({ where: { organizationId: actor.organizationId, sku }, select: { id: true } })) {
+      throw new BusinessError("ეს SKU უკვე არსებობს", "validation");
+    }
     const product = await tx.product.create({
       data: {
         organizationId: actor.organizationId,
@@ -37,7 +43,8 @@ export async function createVariant(
       data: {
         organizationId: actor.organizationId,
         productId: product.id,
-        sku: input.sku.trim(),
+        sku,
+        internalCode,
         nameKa: input.variantName.trim(),
         listPrice: price.toFixed(4),
         potVolumeLiters: input.potVolumeLiters ? D(input.potVolumeLiters).toFixed(3) : null,

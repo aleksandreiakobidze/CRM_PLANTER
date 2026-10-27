@@ -555,7 +555,7 @@ export async function searchRecords(actor: Actor, query: string) {
       take: 40,
     }),
     getDb().productVariant.findMany({
-      where: { organizationId: actor.organizationId, OR: [{ sku: contains(q) }, { nameKa: contains(q) }] },
+      where: { organizationId: actor.organizationId, OR: [{ sku: contains(q) }, { internalCode: contains(q) }, { nameKa: contains(q) }] },
       take: 20,
     }),
     getDb().salesOrder.findMany({ where: { organizationId: actor.organizationId, number: contains(q) }, take: 20 }),

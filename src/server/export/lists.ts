@@ -236,7 +236,7 @@ export async function productsWorkbook(actor: Actor, q: string): Promise<ExportF
   const variants = await getDb().productVariant.findMany({
     where: {
       organizationId: actor.organizationId,
-      OR: query ? [{ sku: contains(query) }, { nameKa: contains(query) }] : undefined,
+      OR: query ? [{ sku: contains(query) }, { internalCode: contains(query) }, { nameKa: contains(query) }] : undefined,
     },
     include: { product: true },
     orderBy: { sku: "asc" },
@@ -248,6 +248,7 @@ export async function productsWorkbook(actor: Actor, q: string): Promise<ExportF
       {
         name: "პროდუქტები",
         columns: [
+          { header: "შიდა კოდი", kind: "text", width: 14 },
           { header: "SKU", kind: "text", width: 16 },
           { header: "სახელი", kind: "text", width: 28 },
           { header: "კატეგორია", kind: "text" },
@@ -260,6 +261,7 @@ export async function productsWorkbook(actor: Actor, q: string): Promise<ExportF
           { header: "აქტიური", kind: "text" },
         ],
         rows: variants.map((variant) => [
+          variant.internalCode ?? "",
           variant.sku,
           variant.nameKa,
           CATEGORY_LABEL[variant.product.category] ?? variant.product.category,
@@ -285,6 +287,7 @@ export async function inventoryWorkbook(actor: Actor): Promise<ExportFile> {
     {
       name: "მარაგები",
       columns: [
+        { header: "შიდა კოდი", kind: "text", width: 14 },
         { header: "SKU", kind: "text", width: 16 },
         { header: "სახელი", kind: "text", width: 28 },
         { header: "ლოკაცია", kind: "text", width: 20 },
@@ -294,6 +297,7 @@ export async function inventoryWorkbook(actor: Actor): Promise<ExportFile> {
         ...(showCost ? [{ header: "თვითღირებულება", kind: "cost" as const }] : []),
       ],
       rows: rows.map((row) => [
+        row.code,
         row.sku,
         row.name,
         row.location,
@@ -323,12 +327,13 @@ export async function rentalWorkbook(actor: Actor): Promise<ExportFile> {
     {
       name: "ფონდი",
       columns: [
+        { header: "შიდა კოდი", kind: "text", width: 14 },
         { header: "კოდი", kind: "text", width: 16 },
         { header: "SKU", kind: "text", width: 16 },
         { header: "სახელი", kind: "text", width: 28 },
         { header: "სტატუსი", kind: "text" },
       ],
-      rows: assets.map((asset) => [asset.code, asset.variant.sku, asset.variant.nameKa, documentStatus(asset.status)]),
+      rows: assets.map((asset) => [asset.internalCode ?? "", asset.code, asset.variant.sku, asset.variant.nameKa, documentStatus(asset.status)]),
     },
     {
       name: "ჯავშნები",

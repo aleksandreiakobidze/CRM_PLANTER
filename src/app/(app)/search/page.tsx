@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { variantLabel } from "@/lib/variant-label";
 import { getActor } from "@/server/auth/session";
 import { searchRecords } from "@/server/features/crm/customer-service";
 
@@ -29,7 +30,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           <h2>პროდუქტები</h2>
           <div className="results">
             {result.variants.map((variant) => (
-              <Link key={variant.id} href={`/products?q=${encodeURIComponent(variant.sku)}`}>{variant.sku} · {variant.nameKa}<small>პროდუქტი</small></Link>
+              <Link key={variant.id} href={`/products?q=${encodeURIComponent(variant.sku)}`}>{variantLabel(variant)}<small>პროდუქტი</small></Link>
             ))}
           </div>
         </div>

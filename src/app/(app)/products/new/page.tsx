@@ -24,7 +24,8 @@ export default async function NewProductPage() {
           <ComboBox name="speciesId" options={[{ value: "", label: "—" }, ...species.map((item) => ({ value: item.id, label: item.nameKa }))]} defaultValue="" />
         </label>
         <label>ვარიანტი<input name="variantName" required /></label>
-        <label>SKU<input name="sku" required /></label>
+        <label>SKU<input name="sku" placeholder="ცარიელი — გამოიყენება შიდა კოდი" /></label>
+        <p className="muted">შიდა კოდი (PL-XXXXXX) ავტომატურად მიენიჭება შენახვისას.</p>
         <label>საცალო ფასი<input name="listPrice" required defaultValue="0" /></label>
         <label>ქოთნის მოცულობა, ლ<input name="potVolumeLiters" /></label>
         <label>მოვლის შენიშვნა<textarea name="careNotes" placeholder="ცარიელი დარჩეს, თუ ფაქტი არ იცით" /></label>

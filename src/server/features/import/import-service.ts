@@ -4,6 +4,7 @@ import type { Actor } from "@/server/auth/permissions";
 import { requirePermission } from "@/server/auth/permissions";
 import { getDb } from "@/server/db";
 import { BusinessError } from "@/server/errors";
+import { nextInternalCode } from "@/server/features/catalog/internal-code";
 import { postOpeningStockTx } from "@/server/features/inventory/stock-service";
 import { D } from "@/server/money";
 import { matchSpecies } from "@/server/org";
@@ -185,6 +186,7 @@ export async function confirmProductImport(actor: Actor, buffer: Buffer) {
           organizationId: actor.organizationId,
           productId: product.id,
           sku,
+          internalCode: await nextInternalCode(tx, actor.organizationId, "variant"),
           nameKa: pick(row.values, ["დასახელება", "name"]),
           listPrice: D(pick(row.values, ["ფასი", "price"]) || "0").toFixed(4),
         },

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BoundForm } from "@/components/bound-form";
 import { ComboBox } from "@/components/combo-box";
 import { RecordList } from "@/components/record-list";
+import { variantLabel } from "@/lib/variant-label";
 import { createAssetAction } from "@/server/actions/work-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -25,15 +26,15 @@ export default async function RentalPage() {
       <div className="card">
         <h2>ფონდში გადაყვანა</h2>
         <BoundForm action={createAssetAction} label="შექმნა">
-          <label>ვარიანტი<ComboBox name="variantId" options={variants.map((variant) => ({ value: variant.id, label: variant.sku }))} /></label>
-          <label>კოდი<input name="code" required /></label>
+          <label>ვარიანტი<ComboBox name="variantId" required options={variants.map((variant) => ({ value: variant.id, label: variantLabel(variant) }))} /></label>
+          <label>კოდი<input name="code" placeholder="ცარიელი — გამოიყენება შიდა კოდი (RA-XXXXXX)" /></label>
         </BoundForm>
       </div>
       <RecordList
         storageKey="rental-assets"
         empty="გასაქირავებელი მცენარე ჯერ არ არის."
-        columns={[{ key: "code", header: "კოდი" }, { key: "status", header: "სტატუსი" }, { key: "sku", header: "SKU" }]}
-        rows={assets.map((asset) => ({ id: asset.id, cells: { code: asset.code, status: asset.status, sku: asset.variant.sku } }))}
+        columns={[{ key: "internal", header: "შიდა კოდი" }, { key: "code", header: "კოდი" }, { key: "status", header: "სტატუსი" }, { key: "sku", header: "პროდუქტი" }]}
+        rows={assets.map((asset) => ({ id: asset.id, cells: { internal: asset.internalCode ?? "—", code: asset.code, status: asset.status, sku: variantLabel(asset.variant) } }))}
       />
       <RecordList
         storageKey="rental-bookings"

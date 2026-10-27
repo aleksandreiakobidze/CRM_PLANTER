@@ -3,6 +3,7 @@ import { requirePermission } from "@/server/auth/permissions";
 import { getDb, type Tx } from "@/server/db";
 import { BusinessError, isExclusionViolation } from "@/server/errors";
 import { recordDeposit } from "@/server/features/finance/payment-service";
+import { nextInternalCode } from "@/server/features/catalog/internal-code";
 import { transferQuantity } from "@/server/features/inventory/stock-service";
 import { D, Decimal, priceFromTarget, roundMoney } from "@/server/money";
 import { nextNumber } from "@/server/numbers";
@@ -18,6 +19,11 @@ export async function createRentalAsset(actor: Actor, input: { variantId: string
   return withTx(async (tx) => {
     const variant = await tx.productVariant.findFirst({ where: { id: input.variantId, organizationId: actor.organizationId } });
     if (!variant) throw new BusinessError("ვარიანტი ვერ მოიძებნა", "not_found");
+    const internalCode = await nextInternalCode(tx, actor.organizationId, "asset");
+    const code = input.code.trim() || internalCode;
+    if (await tx.rentalAsset.findFirst({ where: { organizationId: actor.organizationId, code }, select: { id: true } })) {
+      throw new BusinessError("ეს კოდი უკვე არსებობს", "validation");
+    }
     const from = await tx.location.findUniqueOrThrow({
       where: { organizationId_code: { organizationId: actor.organizationId, code: input.fromLocationCode ?? "sales" } },
     });
@@ -31,15 +37,16 @@ export async function createRentalAsset(actor: Actor, input: { variantId: string
       toLocationId: pool.id,
       quantity: new Decimal(1),
       unitCost: D(variant.averageCost),
-      postingKey: `asset-fund:${actor.organizationId}:${input.code}`,
+      postingKey: `asset-fund:${actor.organizationId}:${code}`,
       sourceType: "rental_asset",
-      sourceId: input.code,
+      sourceId: code,
       actorId: actor.userId,
     });
     return tx.rentalAsset.create({
       data: {
         organizationId: actor.organizationId,
-        code: input.code,
+        code,
+        internalCode,
         variantId: variant.id,
         locationId: pool.id,
         status: "available",

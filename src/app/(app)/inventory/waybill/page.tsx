@@ -4,6 +4,7 @@ import { ComboBox } from "@/components/combo-box";
 import { HeaderLinesForm } from "@/components/header-lines-form";
 import { RecordList } from "@/components/record-list";
 import { RsFields } from "@/components/rs-fields";
+import { variantLabel } from "@/lib/variant-label";
 import { completeInternalAction } from "@/server/actions/waybill-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -33,7 +34,7 @@ export default async function WaybillPage() {
           action={completeInternalAction}
           label="დასრულება"
           mode="stock"
-          items={variants.map((variant) => ({ value: variant.id, label: `${variant.sku} — ${variant.nameKa}`, price: variant.listPrice.toString() }))}
+          items={variants.map((variant) => ({ value: variant.id, label: variantLabel(variant), price: variant.listPrice.toString() }))}
           extra={
             <>
               <label>საიდან<ComboBox name="fromLocationId" required options={locations.map((location) => ({ value: location.id, label: location.nameKa }))} /></label>

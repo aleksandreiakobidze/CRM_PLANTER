@@ -158,6 +158,7 @@ export async function listBalances(actor: Actor) {
     const available = D(row.onHand).minus(row.reserved);
     const item: {
       id: string;
+      code: string;
       sku: string;
       name: string;
       location: string;
@@ -169,6 +170,7 @@ export async function listBalances(actor: Actor) {
       unitCost?: string;
     } = {
       id: row.id,
+      code: row.variant.internalCode ?? "",
       sku: row.variant.sku,
       name: row.variant.nameKa,
       location: row.location.nameKa,

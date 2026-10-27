@@ -5,6 +5,7 @@ import { CalendarDays, Leaf } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { variantLabel } from "@/lib/variant-label";
 import { createBatchAction, repotAction } from "@/server/actions/ops-actions";
 import { getActor } from "@/server/auth/session";
 import { getDb } from "@/server/db";
@@ -29,7 +30,7 @@ export default async function GreenhousePage() {
     getDb().supplier.findMany({ where: { organizationId: actor.organizationId }, orderBy: { name: "asc" } }),
     getDb().location.findMany({ where: { organizationId: actor.organizationId }, orderBy: { code: "asc" } }),
   ]);
-  const variantOptions = variants.map((item) => ({ value: item.id, label: `${item.sku} — ${item.nameKa}` }));
+  const variantOptions = variants.map((item) => ({ value: item.id, label: variantLabel(item) }));
   const greenhouse = locations.find((item) => item.code === "greenhouse") ?? locations[0];
   const canWrite = actor.permissions.has("stock.write");
   const today = tbilisiDateString();
