@@ -12,6 +12,7 @@ import type { Bucket } from "@/server/features/reports/report-kit";
 import { salesReport, type SalesReportFilters } from "@/server/features/reports/sales-report";
 import { rentalReport, type RentalReportFilters } from "@/server/features/reports/rental-report";
 import { purchaseReport, type PurchaseReportFilters } from "@/server/features/reports/purchase-report";
+import { stockReport, type StockReportFilters } from "@/server/features/reports/stock-report";
 import { contractFee } from "@/server/features/maintenance/maintenance-service";
 import { externalHref, hostLabel, PHOTO_ALLOWED_FIELD, photoAllowedLabel, PRIORITY, SEGMENT_LABEL, statusBadge, VERIFICATION } from "@/server/labels";
 import { D } from "@/server/money";
@@ -887,6 +888,58 @@ export async function purchaseReportWorkbook(actor: Actor, filters: PurchaseRepo
   ]);
 }
 
+export async function stockReportWorkbook(actor: Actor, filters: StockReportFilters): Promise<ExportFile> {
+  const data = await stockReport(actor, filters);
+  const cost = data.showCost;
+  return file("მარაგის რეპორტი", "stock-report", [
+    {
+      name: "ნაშთი",
+      columns: [
+        { header: "შიდა კოდი", kind: "text", width: 14 },
+        { header: "SKU", kind: "text", width: 16 },
+        { header: "აითემი", kind: "text", width: 30 },
+        { header: "კატეგორია", kind: "text", width: 16 },
+        { header: "ლოკაცია", kind: "text", width: 20 },
+        { header: `საწყისი (${data.period.from})`, kind: "qty", total: true },
+        { header: "შემოსვლა", kind: "qty", total: true },
+        { header: "გასვლა", kind: "qty", total: true },
+        { header: `საბოლოო (${data.period.to})`, kind: "qty", total: true },
+        { header: "რეზერვი (დღეს)", kind: "qty" },
+        ...(cost
+          ? [
+              { header: "საშ. თვითღირებულება", kind: "money" as const },
+              { header: "ღირებულება", kind: "money" as const, total: true },
+            ]
+          : []),
+      ],
+      rows: data.rows.map((row) => [
+        row.code,
+        row.sku,
+        row.name,
+        row.category,
+        row.location,
+        excelNumber(row.opening, 3),
+        excelNumber(row.incoming, 3),
+        excelNumber(row.outgoing, 3),
+        excelNumber(row.closing, 3),
+        excelNumber(row.reserved, 3),
+        ...(cost ? [excelNumber(row.averageCost ?? 0, 4), excelNumber(row.value ?? 0, 2)] : []),
+      ]),
+    },
+    amountSheet("ლოკაციები", "ლოკაცია", data.breakdowns.locations, cost, true),
+    amountSheet("კატეგორიები", "კატეგორია", data.breakdowns.categories, cost, true),
+    {
+      name: "მოძრაობის ტიპები",
+      columns: [
+        { header: "ტიპი", kind: "text", width: 28 },
+        { header: "ჩანაწერი", kind: "int", total: true },
+        { header: "რაოდენობა", kind: "qty", total: true },
+      ],
+      rows: data.breakdowns.types.map((row) => [row.label, row.count, excelNumber(row.quantity, 3)]),
+    },
+  ]);
+}
+
 function params<T extends string>(url: URL, keys: readonly T[]): Partial<Record<T, string>> {
   const out: Partial<Record<T, string>> = {};
   for (const key of keys) {
@@ -915,6 +968,7 @@ const BUILDERS = {
   "sales-report": (actor: Actor, url: URL) => salesReportWorkbook(actor, params(url, ["from", "to", "customerId", "ownerId", "source"] as const)),
   "rental-report": (actor: Actor, url: URL) => rentalReportWorkbook(actor, params(url, ["from", "to", "customerId", "status"] as const)),
   "purchase-report": (actor: Actor, url: URL) => purchaseReportWorkbook(actor, params(url, ["from", "to", "supplierId", "status", "variantId"] as const)),
+  "stock-report": (actor: Actor, url: URL) => stockReportWorkbook(actor, params(url, ["from", "to", "locationId", "category", "q", "only"] as const)),
   customers: (actor: Actor, url: URL) =>
     customersWorkbook(actor, {
       q: url.searchParams.get("q") ?? undefined,
